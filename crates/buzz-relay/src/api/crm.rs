@@ -24,6 +24,8 @@ use crate::{
     state::AppState,
 };
 
+pub mod products;
+
 /// Route path of the space read.
 pub const SPACE_PATH: &str = "/crm/space";
 
@@ -125,6 +127,47 @@ pub(crate) async fn space_role(
             .map_err(|e| internal_error(&format!("CRM space role: {e}")).into_response())
     })
     .transpose()
+}
+
+/// A reader who is a current member of the CRM space channel.
+pub(crate) struct CrmMember {
+    pub(crate) reader: CrmReader,
+    pub(crate) space: buzz_db::crm::CrmSpaceRecord,
+}
+
+impl CrmMember {
+    pub(crate) fn community(&self) -> buzz_core::CommunityId {
+        self.reader.tenant.community()
+    }
+}
+
+/// Authenticate the caller and require membership of the CRM space channel:
+/// 404 when the community has no space, 403 for non-members.
+#[allow(clippy::result_large_err)] // Response is the natural error type for axum handlers
+pub(crate) async fn authorize_space_member(
+    state: &Arc<AppState>,
+    headers: &HeaderMap,
+    path: &str,
+    raw_query: Option<&str>,
+) -> Result<CrmMember, Response> {
+    let reader = authorize_crm_reader(state, headers, path, raw_query).await?;
+    let space = state
+        .db
+        .crm_get_space(reader.tenant.community())
+        .await
+        .map_err(|e| internal_error(&format!("CRM space read: {e}")).into_response())?
+        .ok_or_else(|| {
+            api_error(StatusCode::NOT_FOUND, "this community has no CRM space").into_response()
+        })?;
+    if space_role(state, &reader, space.channel_id)
+        .await?
+        .is_none()
+    {
+        return Err(
+            api_error(StatusCode::FORBIDDEN, "not a member of the CRM space").into_response(),
+        );
+    }
+    Ok(CrmMember { reader, space })
 }
 
 /// Query parameters of `GET /crm/space`.

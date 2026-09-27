@@ -29,15 +29,15 @@ pub(super) enum Prepared {
     },
 }
 
-fn invalid(error: CrmError) -> IngestError {
+pub(super) fn invalid(error: CrmError) -> IngestError {
     IngestError::Rejected(format!("invalid: {error}"))
 }
 
-fn tag_slices(event: &Event) -> impl Iterator<Item = &[String]> {
+pub(super) fn tag_slices(event: &Event) -> impl Iterator<Item = &[String]> {
     event.tags.iter().map(|tag| tag.as_slice())
 }
 
-fn conflict(message: &str) -> IngestError {
+pub(super) fn conflict(message: &str) -> IngestError {
     // Optimistic-concurrency failures share the canvas CAS variant so the HTTP
     // bridge answers 409 and the CLI exits with its write-conflict code.
     IngestError::CanvasConflict(format!("conflict: {message}"))

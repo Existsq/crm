@@ -66,6 +66,56 @@ impl Money {
     }
 }
 
+/// Parse a non-negative decimal with at most `frac_digits` fractional digits
+/// into an integer scaled by `10^frac_digits`.
+///
+/// Accepts `.` or `,` as the decimal separator and spaces (including the
+/// no-break spaces `ru-RU` formatting emits) as thousands separators:
+/// `"1 234,50"`, `"1234.5"` and `"1234"` all parse. Signs, exponents and extra
+/// fractional digits are rejected rather than rounded.
+fn parse_scaled(raw: &str, frac_digits: u32) -> Option<i64> {
+    let compact: String = raw
+        .trim()
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '\u{a0}' | '\u{202f}'))
+        .collect();
+    let (whole, frac) = match compact.find(['.', ',']) {
+        Some(at) => (&compact[..at], &compact[at + 1..]),
+        None => (compact.as_str(), ""),
+    };
+    let digits_only = |s: &str| s.chars().all(|c| c.is_ascii_digit());
+    if whole.is_empty() || !digits_only(whole) || !digits_only(frac) {
+        return None;
+    }
+    if frac.len() > frac_digits as usize || (compact.len() > whole.len() && frac.is_empty()) {
+        return None;
+    }
+    let scale = 10_i64.checked_pow(frac_digits)?;
+    let whole: i64 = whole.parse().ok()?;
+    let mut frac_value: i64 = if frac.is_empty() {
+        0
+    } else {
+        frac.parse().ok()?
+    };
+    for _ in frac.len()..frac_digits as usize {
+        frac_value *= 10;
+    }
+    whole.checked_mul(scale)?.checked_add(frac_value)
+}
+
+impl Money {
+    /// Parse a ruble amount such as `"1 234,50"` or `"99.9"` into kopecks.
+    pub fn parse_rubles(raw: &str, field: &'static str) -> Result<Self> {
+        let minor = parse_scaled(raw, 2).ok_or_else(|| {
+            CrmError::field(
+                field,
+                "must be a non-negative amount with at most 2 decimals",
+            )
+        })?;
+        Self::non_negative(minor, field)
+    }
+}
+
 /// A quantity in thousandths of a unit (0.001 kg, 0.001 pcs).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
@@ -106,6 +156,17 @@ impl Qty {
     /// True when the quantity is a whole number of units.
     pub const fn is_whole(self) -> bool {
         self.0 % QTY_SCALE == 0
+    }
+
+    /// Parse a non-negative quantity in units such as `"1,5"` or `"12"`.
+    pub fn parse_units(raw: &str, field: &'static str) -> Result<Self> {
+        let milli = parse_scaled(raw, 3).ok_or_else(|| {
+            CrmError::field(
+                field,
+                "must be a non-negative number with at most 3 decimals",
+            )
+        })?;
+        Self::from_milli(milli).map_err(|_| CrmError::field(field, "out of range"))
     }
 }
 
@@ -158,6 +219,38 @@ mod tests {
                 v.qty_milli
             );
         }
+    }
+
+    #[test]
+    fn decimal_amounts_parse_exactly() {
+        let rubles = |raw| Money::parse_rubles(raw, "price").map(Money::minor);
+        assert_eq!(rubles("1 234,50"), Ok(123_450));
+        assert_eq!(rubles("1234.5"), Ok(123_450));
+        assert_eq!(rubles("1234"), Ok(123_400));
+        assert_eq!(rubles("1\u{a0}234,05"), Ok(123_405));
+        assert_eq!(rubles("0,01"), Ok(1));
+        assert_eq!(rubles("1000000000"), Ok(MAX_MONEY_MINOR));
+        for bad in [
+            "",
+            "-1",
+            "+1",
+            "1,234",
+            "1.2.3",
+            "1e3",
+            "abc",
+            ",5",
+            "5,",
+            "1000000000,01",
+            "99999999999999999999",
+        ] {
+            assert!(rubles(bad).is_err(), "{bad:?}");
+        }
+        let units = |raw| Qty::parse_units(raw, "qty").map(Qty::milli);
+        assert_eq!(units("1,5"), Ok(1_500));
+        assert_eq!(units("0.001"), Ok(1));
+        assert_eq!(units("12"), Ok(12_000));
+        assert!(units("0.0001").is_err());
+        assert!(units("1000001").is_err());
     }
 
     #[test]

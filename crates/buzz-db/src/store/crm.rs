@@ -1,4 +1,5 @@
-//! CRM projections: spaces and warehouses (migration 0050).
+//! CRM projections: spaces and warehouses (migration 0050); the product
+//! catalog lives in [`catalog`] (migration 0051).
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
 //! event and its projection rows commit or roll back together (ADR-0001).
@@ -13,6 +14,13 @@ use sqlx::{PgPool, Postgres, Row as _, Transaction};
 use uuid::Uuid;
 
 use crate::{error::Result, CommunityId, Db};
+
+pub mod catalog;
+
+pub use catalog::{
+    CrmProductRecord, ProductPage, ProductQuery, ProductWrite, ProductWriteOutcome,
+    MAX_PRODUCT_PAGE,
+};
 
 /// Channel facts needed to decide whether a channel can host a CRM space.
 #[derive(Debug, Clone, PartialEq, Eq)]

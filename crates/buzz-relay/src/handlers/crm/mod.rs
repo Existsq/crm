@@ -7,6 +7,7 @@
 //! scope, ban/timeout, `h`-channel resolution, token-channel access, channel
 //! membership and the archived-channel check.
 
+mod catalog;
 mod decide;
 pub(crate) mod guards;
 mod space;
@@ -18,7 +19,7 @@ use sqlx::{Postgres, Transaction};
 use tracing::info;
 use uuid::Uuid;
 
-use buzz_core::kind::{event_kind_u32, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE};
+use buzz_core::kind::{event_kind_u32, KIND_CRM_PRODUCT, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE};
 use buzz_core::tenant::TenantContext;
 
 use super::event::dispatch_persistent_event;
@@ -44,8 +45,9 @@ pub(crate) async fn ingest_crm_event(
 
     // Pure validation first: malformed payloads never open a transaction.
     let prepared = match kind {
-        KIND_CRM_SPACE => space::Prepared::space(event)?,
-        KIND_CRM_WAREHOUSE => space::Prepared::warehouse(event)?,
+        KIND_CRM_SPACE => Prepared::Space(space::Prepared::space(event)?),
+        KIND_CRM_WAREHOUSE => Prepared::Space(space::Prepared::warehouse(event)?),
+        KIND_CRM_PRODUCT => Prepared::Product(catalog::PreparedProduct::parse(event)?),
         other => {
             return Err(IngestError::Rejected(format!(
                 "invalid: CRM kind {other} is not supported by this relay"
@@ -107,6 +109,27 @@ pub(crate) async fn ingest_crm_event(
         accepted: true,
         message: String::new(),
     })
+}
+
+/// A validated CRM event, ready to apply inside the write transaction.
+enum Prepared {
+    Space(space::Prepared),
+    Product(catalog::PreparedProduct),
+}
+
+impl Prepared {
+    async fn apply(
+        self,
+        tx: &mut Transaction<'static, Postgres>,
+        tenant: &TenantContext,
+        event: &Event,
+        channel_id: Uuid,
+    ) -> Result<(), IngestError> {
+        match self {
+            Prepared::Space(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::Product(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+        }
+    }
 }
 
 async fn begin(

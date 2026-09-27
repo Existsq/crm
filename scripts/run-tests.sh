@@ -179,7 +179,7 @@ run_unit_tests() {
     cargo test -p buzz-relay --lib handlers::crm:: -- --nocapture
 
   run_test_step "buzz-relay CRM read API tests" \
-    cargo test -p buzz-relay --lib api::crm::tests:: -- --nocapture
+    cargo test -p buzz-relay --lib api::crm:: -- --nocapture
 }
 
 # ---- DB / integration tests (infra required) --------------------------------
