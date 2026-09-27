@@ -308,13 +308,26 @@ async fn warehouses_keep_exactly_one_default() {
         .unwrap(),
         WarehouseWriteOutcome::Missing
     );
-    // The former default can now be archived.
+    // Demoting the old default gave it the demoting event's revision, so a
+    // client still holding its pre-move revision cannot re-promote it.
+    assert_eq!(
+        write_warehouse(
+            &mut tx,
+            fx.community,
+            write(&fx, main, "Склад", true, false, &r4),
+            Some(&rev(1))
+        )
+        .await
+        .unwrap(),
+        WarehouseWriteOutcome::RevisionMismatch
+    );
+    // With the current revision the former default can now be archived.
     assert_eq!(
         write_warehouse(
             &mut tx,
             fx.community,
             write(&fx, main, "Склад", false, true, &r4),
-            Some(&rev(1))
+            Some(&r3)
         )
         .await
         .unwrap(),
@@ -428,4 +441,123 @@ async fn spaces_are_community_scoped() {
         .await
         .unwrap()
         .is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres"]
+async fn concurrent_creates_of_one_warehouse_id_admit_exactly_one() {
+    let fx = fixture(ChannelVisibility::Private).await;
+    create(&fx, Uuid::new_v4()).await;
+    let id = Uuid::new_v4();
+    let (first, second) = (rev(20), rev(21));
+
+    let mut tx1 = fx.db.begin_event_write_transaction().await.unwrap();
+    assert_eq!(
+        write_warehouse(
+            &mut tx1,
+            fx.community,
+            write(&fx, id, "A", false, false, &first),
+            None
+        )
+        .await
+        .unwrap(),
+        WarehouseWriteOutcome::Written
+    );
+
+    // The second create cannot see the uncommitted row and blocks on the key.
+    let db = fx.db.clone();
+    let community = fx.community;
+    let channel = fx.channel;
+    let racer = tokio::spawn(async move {
+        let mut tx2 = db.begin_event_write_transaction().await.unwrap();
+        let outcome = write_warehouse(
+            &mut tx2,
+            community,
+            WarehouseWrite {
+                warehouse_id: id,
+                space_channel_id: channel,
+                name: "B",
+                is_default: false,
+                archived: false,
+                revision_event_id: &second,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        tx2.commit().await.unwrap();
+        outcome
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    tx1.commit().await.unwrap();
+
+    assert_eq!(racer.await.unwrap(), WarehouseWriteOutcome::AlreadyExists);
+    let rows = fx
+        .db
+        .crm_list_warehouses(fx.community, fx.channel, true)
+        .await
+        .unwrap();
+    let row = rows.iter().find(|w| w.warehouse_id == id).unwrap();
+    assert_eq!(
+        row.name, "A",
+        "the losing create must not overwrite the winner"
+    );
+    assert_eq!(row.revision_event_id, first);
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres"]
+async fn space_channel_cannot_be_opened_expired_archived_or_deleted() {
+    let fx = fixture(ChannelVisibility::Private).await;
+    create(&fx, Uuid::new_v4()).await;
+    let update = |sql: &'static str| {
+        let pool = fx.db.pool.clone();
+        let community = fx.community;
+        let channel = fx.channel;
+        async move {
+            sqlx::query(sql)
+                .bind(community.as_uuid())
+                .bind(channel)
+                .execute(&pool)
+                .await
+        }
+    };
+    for sql in [
+        "UPDATE channels SET visibility = 'open' WHERE community_id = $1 AND id = $2",
+        "UPDATE channels SET ttl_seconds = 3600 WHERE community_id = $1 AND id = $2",
+        "UPDATE channels SET archived_at = now() WHERE community_id = $1 AND id = $2",
+        "UPDATE channels SET deleted_at = now() WHERE community_id = $1 AND id = $2",
+    ] {
+        let error = update(sql).await.expect_err(sql);
+        assert!(
+            error.to_string().contains("hosts the CRM space"),
+            "{sql}: {error}"
+        );
+    }
+    // Ordinary metadata edits of the space channel still work.
+    update("UPDATE channels SET name = 'crm-renamed' WHERE community_id = $1 AND id = $2")
+        .await
+        .expect("rename");
+
+    // Channels that are not the CRM space are unaffected.
+    let other = Uuid::new_v4();
+    fx.db
+        .create_channel_with_id(
+            fx.community,
+            other,
+            "other",
+            ChannelType::Stream,
+            ChannelVisibility::Private,
+            None,
+            &fx.owner,
+            None,
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE channels SET visibility = 'open' WHERE community_id = $1 AND id = $2")
+        .bind(fx.community.as_uuid())
+        .bind(other)
+        .execute(&fx.db.pool)
+        .await
+        .expect("non-CRM channel may open");
 }

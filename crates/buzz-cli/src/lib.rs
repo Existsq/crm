@@ -335,7 +335,7 @@ pub enum CrmWarehousesCmd {
         #[arg(long)]
         default: bool,
     },
-    /// Update a warehouse (name, default flag, archive)
+    /// Update a warehouse; unspecified fields keep their current values
     Update {
         /// CRM space channel UUID
         #[arg(long)]
@@ -343,18 +343,18 @@ pub enum CrmWarehousesCmd {
         /// Warehouse UUID
         #[arg(long)]
         warehouse: String,
-        /// Current warehouse revision (from `buzz crm space show`)
+        /// Expected revision (defaults to the current one from `buzz crm space show`)
         #[arg(long)]
-        revision: String,
+        revision: Option<String>,
         /// New name
         #[arg(long)]
-        name: String,
-        /// Make it the default warehouse
+        name: Option<String>,
+        /// Make it the default warehouse (true) — the default cannot be unset directly
         #[arg(long)]
-        default: bool,
-        /// Archive the warehouse
+        default: Option<bool>,
+        /// Archive (true) or restore (false) the warehouse
         #[arg(long)]
-        archived: bool,
+        archived: Option<bool>,
     },
 }
 

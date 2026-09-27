@@ -151,7 +151,9 @@ impl Prepared {
                     channel_id,
                     &actor,
                     CrmAction::ManageWarehouses,
-                    false,
+                    // Exclusive: serializes warehouse writes per space so two
+                    // concurrent default moves cannot both clear-then-set.
+                    true,
                 )
                 .await?;
                 let write = store::WarehouseWrite {

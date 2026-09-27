@@ -347,30 +347,41 @@ pub async fn write_warehouse(
     }
 
     if write.is_default {
+        // The demoted warehouse changed too: give it this event's revision so
+        // a client holding its old revision cannot silently re-promote it.
         sqlx::query(
-            "UPDATE crm_warehouses SET is_default = FALSE, updated_at = now() \
+            "UPDATE crm_warehouses \
+             SET is_default = FALSE, revision_event_id = $4, updated_at = now() \
              WHERE community_id = $1 AND space_channel_id = $2 AND is_default \
                AND warehouse_id <> $3",
         )
         .bind(community.as_uuid())
         .bind(write.space_channel_id)
         .bind(write.warehouse_id)
+        .bind(write.revision_event_id)
         .execute(&mut **tx)
         .await?;
     }
 
-    sqlx::query(
-        "INSERT INTO crm_warehouses \
-             (community_id, warehouse_id, space_channel_id, name, is_default, archived_at, \
-              revision_event_id) \
-         VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN now() END, $7) \
-         ON CONFLICT (community_id, warehouse_id) DO UPDATE SET \
-             name = EXCLUDED.name, \
-             is_default = EXCLUDED.is_default, \
-             archived_at = CASE WHEN $6 THEN COALESCE(crm_warehouses.archived_at, now()) END, \
-             revision_event_id = EXCLUDED.revision_event_id, \
-             updated_at = now()",
-    )
+    let written = if expected_revision.is_none() {
+        sqlx::query(
+            "INSERT INTO crm_warehouses \
+                 (community_id, warehouse_id, space_channel_id, name, is_default, archived_at, \
+                  revision_event_id) \
+             VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN now() END, $7) \
+             ON CONFLICT (community_id, warehouse_id) DO NOTHING",
+        )
+    } else {
+        sqlx::query(
+            "UPDATE crm_warehouses SET \
+                 name = $4, \
+                 is_default = $5, \
+                 archived_at = CASE WHEN $6 THEN COALESCE(archived_at, now()) END, \
+                 revision_event_id = $7, \
+                 updated_at = now() \
+             WHERE community_id = $1 AND warehouse_id = $2 AND space_channel_id = $3",
+        )
+    }
     .bind(community.as_uuid())
     .bind(write.warehouse_id)
     .bind(write.space_channel_id)
@@ -379,8 +390,14 @@ pub async fn write_warehouse(
     .bind(write.archived)
     .bind(write.revision_event_id)
     .execute(&mut **tx)
-    .await?;
-    Ok(WarehouseWriteOutcome::Written)
+    .await?
+    .rows_affected();
+    Ok(if written == 1 {
+        WarehouseWriteOutcome::Written
+    } else {
+        // Only reachable for a create racing another create of the same id.
+        WarehouseWriteOutcome::AlreadyExists
+    })
 }
 
 /// The community's CRM space, if any.

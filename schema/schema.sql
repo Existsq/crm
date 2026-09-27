@@ -1963,5 +1963,29 @@ CREATE TABLE crm_warehouses (
 CREATE UNIQUE INDEX crm_warehouses_one_default
     ON crm_warehouses (community_id, space_channel_id) WHERE is_default;
 
+-- Defence in depth for ADR-0002: while a channel hosts the CRM space it must
+-- stay private, permanent, unarchived and undeleted. The relay rejects such
+-- edits up front; this trigger also closes the race where a channel edit was
+-- validated before the space was bound but commits after it.
+CREATE FUNCTION crm_guard_space_channel() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF (NEW.visibility <> 'private'
+        OR NEW.ttl_seconds IS NOT NULL
+        OR NEW.archived_at IS NOT NULL
+        OR NEW.deleted_at IS NOT NULL)
+       AND EXISTS (
+           SELECT 1 FROM crm_spaces s
+            WHERE s.community_id = NEW.community_id AND s.channel_id = NEW.id
+       ) THEN
+        RAISE EXCEPTION 'channel % hosts the CRM space and must stay private, permanent and live', NEW.id
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+CREATE TRIGGER crm_guard_space_channel BEFORE UPDATE ON channels
+FOR EACH ROW EXECUTE FUNCTION crm_guard_space_channel();
+
 SELECT attach_community_write_fence('crm_spaces');
 SELECT attach_community_write_fence('crm_warehouses');
