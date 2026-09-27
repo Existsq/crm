@@ -261,7 +261,7 @@ async fn get_space_status(keys: Option<&Keys>) -> u16 {
 }
 
 #[tokio::test]
-#[ignore = "requires a running relay and its Postgres"]
+#[ignore = "requires a running relay"]
 async fn crm_space_lifecycle_and_access() {
     let pool = pool().await;
     let owner = Keys::generate();
@@ -421,7 +421,7 @@ async fn crm_space_lifecycle_and_access() {
 }
 
 #[tokio::test]
-#[ignore = "requires a running relay and its Postgres"]
+#[ignore = "requires a running relay"]
 async fn crm_space_rejects_open_channels_and_bad_payloads() {
     let pool = pool().await;
     let owner = Keys::generate();
@@ -484,7 +484,7 @@ async fn crm_space_rejects_open_channels_and_bad_payloads() {
 }
 
 #[tokio::test]
-#[ignore = "requires a running relay and its Postgres"]
+#[ignore = "requires a running relay"]
 async fn crm_space_cas_roles_and_guards() {
     let pool = pool().await;
     let owner = Keys::generate();
@@ -682,7 +682,7 @@ async fn get_json(keys: &Keys, path_and_query: &str) -> Value {
 /// space row. Without that lock the demote-then-set steps interleave and the
 /// one-default unique index turns a valid move into an internal error.
 #[tokio::test]
-#[ignore = "requires a running relay and its Postgres"]
+#[ignore = "requires a running relay"]
 async fn crm_space_concurrent_default_moves_serialize() {
     let pool = pool().await;
     let owner = Keys::generate();

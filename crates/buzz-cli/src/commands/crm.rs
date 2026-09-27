@@ -367,6 +367,16 @@ mod tests {
         let payload = buzz_crm::WarehousePayload::parse(&events[0].content).unwrap();
         assert!(!payload.archived);
         assert_eq!(payload.name, "Старый");
+        let revision = events[0]
+            .tags
+            .iter()
+            .find(|t| t.as_slice().first().map(String::as_str) == Some("expected-revision"))
+            .and_then(|t| t.as_slice().get(1).cloned());
+        assert_eq!(
+            revision,
+            Some("ab".repeat(32)),
+            "CAS on the archived row's revision"
+        );
     }
 
     #[test]
