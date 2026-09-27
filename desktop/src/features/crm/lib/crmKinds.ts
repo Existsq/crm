@@ -7,9 +7,11 @@
  */
 export const KIND_CRM_SPACE = 42100;
 export const KIND_CRM_WAREHOUSE = 42101;
+export const KIND_CRM_PRODUCT = 42102;
 
 /** Every CRM kind the desktop subscribes to for live refresh. */
 export const CRM_KINDS: readonly number[] = [
   KIND_CRM_SPACE,
   KIND_CRM_WAREHOUSE,
+  KIND_CRM_PRODUCT,
 ];

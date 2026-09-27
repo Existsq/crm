@@ -25,6 +25,11 @@ async function shoot(page: Page, seed: CrmSeed, name: string) {
   await page.getByTestId("open-crm-view").click();
   const view = page.getByTestId("crm-view");
   await expect(view).toBeVisible();
+  // Members land on the catalog; these shots document the settings section.
+  if (seed.space?.role) {
+    await page.getByTestId("crm-section-settings").click();
+    await expect(page.getByTestId("crm-settings-form")).toBeVisible();
+  }
   await expect(page.getByTestId("crm-gate-loading")).toHaveCount(0);
   await waitForAnimations(page);
   await view.screenshot({ path: `${OUT}/${name}.png` });

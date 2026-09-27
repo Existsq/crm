@@ -17,15 +17,26 @@ test.beforeEach(async ({ page }) => {
   await installMockBridge(page);
 });
 
-async function openCrm(page: Page, seed?: CrmSeed) {
+async function openCrm(
+  page: Page,
+  seed?: CrmSeed,
+  section: "products" | "settings" = "products",
+) {
   await page.goto("/");
   if (seed) {
     await page.waitForFunction(() => Boolean(window.__BUZZ_E2E_SEED_CRM__));
     await page.evaluate((value) => window.__BUZZ_E2E_SEED_CRM__?.(value), seed);
   }
   await page.getByTestId("open-crm-view").click();
-  await expect(page).toHaveURL(/#\/crm\/settings$/);
+  // `/crm` opens the first section, the catalog.
+  await expect(page).toHaveURL(/#\/crm\/products$/);
   await expect(page.getByTestId("crm-view")).toBeVisible();
+  if (section === "settings") await openSettings(page);
+}
+
+async function openSettings(page: Page) {
+  await page.getByTestId("crm-section-settings").click();
+  await expect(page).toHaveURL(/#\/crm\/settings$/);
 }
 
 function memberSeed(role: "owner" | "member"): CrmSeed {
@@ -47,15 +58,18 @@ test("sidebar entry opens the CRM and marks itself active", async ({
     "true",
   );
   const nav = page.getByRole("navigation", { name: "Разделы CRM" });
-  await expect(nav.getByRole("button", { name: "Настройки" })).toHaveAttribute(
+  await expect(nav.getByRole("button", { name: "Товары" })).toHaveAttribute(
     "aria-current",
     "page",
   );
+  await expect(
+    nav.getByRole("button", { name: "Настройки" }),
+  ).not.toHaveAttribute("aria-current", "page");
 });
 
 test("unknown CRM sections redirect to the first section", async ({ page }) => {
   await page.goto("/#/crm/does-not-exist");
-  await expect(page).toHaveURL(/#\/crm\/settings$/);
+  await expect(page).toHaveURL(/#\/crm\/products$/);
 });
 
 test("the CRM entry is hidden when the preview feature is off", async ({
@@ -86,6 +100,10 @@ test("a community admin creates the CRM space in a new private channel", async (
   await form.getByTestId("crm-warehouse-name").fill("Склад на Ленина");
   await form.getByTestId("crm-create-submit").click();
 
+  await expect(page.getByTestId("crm-products-empty")).toContainText(
+    "Товаров пока нет",
+  );
+  await openSettings(page);
   const settings = page.getByTestId("crm-settings-form");
   await expect(settings).toBeVisible();
   const warehouses = page.getByTestId("crm-warehouses");
@@ -112,10 +130,11 @@ test("non-members of the space channel see the no-access state", async ({
     "Нет доступа к CRM",
   );
   await expect(page.getByTestId("crm-settings-form")).toHaveCount(0);
+  await expect(page.getByTestId("crm-products")).toHaveCount(0);
 });
 
 test("owners save settings and manage warehouses", async ({ page }) => {
-  await openCrm(page, memberSeed("owner"));
+  await openCrm(page, memberSeed("owner"), "settings");
 
   const form = page.getByTestId("crm-settings-form");
   const save = form.getByTestId("crm-settings-save");
@@ -153,7 +172,7 @@ test("owners save settings and manage warehouses", async ({ page }) => {
 test("members see settings read-only and cannot manage warehouses", async ({
   page,
 }) => {
-  await openCrm(page, memberSeed("member"));
+  await openCrm(page, memberSeed("member"), "settings");
   const form = page.getByTestId("crm-settings-form");
   await expect(form).toContainText(
     "Изменять настройки могут только владелец и администраторы канала CRM.",
@@ -166,7 +185,7 @@ test("members see settings read-only and cannot manage warehouses", async ({
 test("a stale settings save shows the conflict message and keeps the draft", async ({
   page,
 }) => {
-  await openCrm(page, memberSeed("owner"));
+  await openCrm(page, memberSeed("owner"), "settings");
   const form = page.getByTestId("crm-settings-form");
   await form.getByTestId("crm-settings-fiscalization").selectOption("off");
   // Another client changes the space: the mock revision moves on.
@@ -193,7 +212,7 @@ test("a stale settings save shows the conflict message and keeps the draft", asy
 test("a settings change arriving during an edit is a conflict with a way back", async ({
   page,
 }) => {
-  await openCrm(page, memberSeed("owner"));
+  await openCrm(page, memberSeed("owner"), "settings");
   const form = page.getByTestId("crm-settings-form");
   await form.getByTestId("crm-settings-fiscalization").selectOption("off");
   // Another client saves different settings and this client refetches them.
@@ -232,10 +251,11 @@ test("a settings change arriving during an edit is a conflict with a way back", 
 test("a warehouse create retried after a lost response is not duplicated", async ({
   page,
 }) => {
-  await openCrm(page, {
-    ...memberSeed("owner"),
-    loseNextWriteResponse: true,
-  });
+  await openCrm(
+    page,
+    { ...memberSeed("owner"), loseNextWriteResponse: true },
+    "settings",
+  );
   const warehouses = page.getByTestId("crm-warehouses");
   await warehouses.getByTestId("crm-warehouse-add").click();
   const dialog = page.getByTestId("crm-warehouse-dialog");

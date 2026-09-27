@@ -1,10 +1,11 @@
 import { ru } from "@/features/crm/i18n/ru";
 
 /**
- * CRM sections in navigation order. Each feature branch appends its section;
- * `/crm` opens the first one.
+ * CRM sections in navigation order; `/crm` opens the first one, the catalog.
+ * Each feature branch adds its section here.
  */
 export const CRM_SECTIONS = [
+  { id: "products", label: ru.sections.products },
   { id: "settings", label: ru.sections.settings },
 ] as const;
 

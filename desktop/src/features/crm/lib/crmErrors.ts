@@ -17,6 +17,34 @@ export type DescribedCrmError = {
 
 const RELAY_PREFIXES = ["restricted", "conflict", "invalid"] as const;
 
+/** Conflicts that name a duplicate value get a message naming it too. */
+const DUPLICATE_CONFLICTS: ReadonlyArray<{
+  pattern: RegExp;
+  template: string;
+}> = [
+  {
+    pattern: /^SKU "?(.+?)"? is already used by another product/,
+    template: ru.errors.skuTaken,
+  },
+  {
+    pattern: /^barcode "?([^"\s]+)"? is already used by another product/,
+    template: ru.errors.barcodeTaken,
+  },
+];
+
+function relayMessage(
+  prefix: (typeof RELAY_PREFIXES)[number],
+  reason: string,
+): string {
+  if (prefix === "conflict") {
+    for (const { pattern, template } of DUPLICATE_CONFLICTS) {
+      const match = pattern.exec(reason);
+      if (match) return template.replace("{value}", match[1]);
+    }
+  }
+  return ru.errors[prefix];
+}
+
 /**
  * Classify a CRM command failure by the relay's machine-readable prefix.
  *
@@ -35,7 +63,7 @@ export function describeCrmError(error: unknown): DescribedCrmError {
       const reason = raw.slice(index + prefix.length + 1).trim();
       return {
         kind: prefix,
-        message: ru.errors[prefix],
+        message: relayMessage(prefix, reason),
         detail: reason.length > 0 ? reason : null,
       };
     }

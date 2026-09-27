@@ -1,4 +1,5 @@
 //! CRM space and warehouse commands (relay kinds 42100–42101, `GET /crm/space`).
+//! Catalog commands live in `crm_products.rs`.
 //!
 //! Reads return the relay's read model unchanged; writes build events with the
 //! shared `buzz-sdk` CRM builders (which run the same payload validation as the
@@ -38,11 +39,11 @@ pub struct CrmWarehouseWriteInput {
     pub expected_revision: Option<String>,
 }
 
-fn parse_uuid(raw: &str, what: &str) -> Result<uuid::Uuid, String> {
+pub(super) fn parse_uuid(raw: &str, what: &str) -> Result<uuid::Uuid, String> {
     uuid::Uuid::parse_str(raw).map_err(|_| format!("invalid {what}: {raw}"))
 }
 
-fn sdk_error(error: buzz_sdk_pkg::SdkError) -> String {
+pub(super) fn sdk_error(error: buzz_sdk_pkg::SdkError) -> String {
     format!("invalid: {error}")
 }
 

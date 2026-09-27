@@ -4,7 +4,8 @@
  * Mirrors the relay contract closely enough for UI tests: role × action
  * capabilities from ADR-0002, compare-and-swap revisions, the one-default
  * warehouse rule and `restricted:` / `conflict:` / `invalid:` error prefixes.
- * Specs seed state with `window.__BUZZ_E2E_SEED_CRM__`.
+ * Specs seed state with `window.__BUZZ_E2E_SEED_CRM__`. Catalog commands are
+ * delegated to `e2eBridgeCrmProducts.ts`.
  */
 
 import type {
@@ -12,6 +13,12 @@ import type {
   CrmRole,
   RawCrmSpace,
 } from "@/shared/api/tauriCrm";
+
+import {
+  handleCrmProductMockCommand,
+  type MockCrmProductSeed,
+  seedMockCrmProducts,
+} from "./e2eBridgeCrmProducts.ts";
 
 type RawSettings = Extract<RawCrmSpace, { member: true }>["settings"];
 
@@ -47,6 +54,7 @@ export type MockCrmSeed = {
     role: CrmRole | null;
     settings?: Partial<RawSettings>;
     warehouses?: Array<{ id: string; name: string; is_default?: boolean }>;
+    products?: MockCrmProductSeed[];
   } | null;
 };
 
@@ -110,9 +118,11 @@ function revision(): string {
 
 export function resetMockCrm(): void {
   state = { canCreate: true, space: null, loseNextWriteResponse: false };
+  seedMockCrmProducts([]);
 }
 
 export function seedMockCrm(seed: MockCrmSeed): void {
+  seedMockCrmProducts(seed.space?.products ?? []);
   state = {
     canCreate: seed.canCreate ?? true,
     loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
@@ -315,7 +325,10 @@ export function handleCrmMockCommand(
         ),
       };
     default:
-      return undefined;
+      return handleCrmProductMockCommand(command, payload, {
+        channelId: state.space?.role ? state.space.channelId : null,
+        requireCapability,
+      });
   }
 }
 

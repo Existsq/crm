@@ -24,7 +24,7 @@ export function NativeSelect({
   value: string;
 } & Pick<
   React.SelectHTMLAttributes<HTMLSelectElement>,
-  "aria-describedby" | "aria-label" | "name" | "required"
+  "aria-describedby" | "aria-invalid" | "aria-label" | "name" | "required"
 > & { "data-testid"?: string }) {
   return (
     <div className={cn("relative", className)}>

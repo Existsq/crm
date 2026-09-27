@@ -1,5 +1,11 @@
 import * as React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { CRM_KINDS } from "@/features/crm/lib/crmKinds";
 import { relayClient } from "@/shared/api/relayClient";
@@ -12,6 +18,11 @@ import {
   type CrmSpaceState,
   type CrmWarehouseWriteInput,
 } from "@/shared/api/tauriCrm";
+import {
+  listCrmProducts,
+  writeCrmProduct,
+  type CrmProductWriteInput,
+} from "@/shared/api/tauriCrmProducts";
 
 /** Root of every CRM query key; listed in `RELAY_QUERY_ROOTS`. */
 export const crmQueryRoot = ["crm"] as const;
@@ -19,6 +30,8 @@ export const crmSpaceQueryKey = ["crm", "space"] as const;
 
 /** Burst window for live-event invalidation. */
 const LIVE_INVALIDATE_DEBOUNCE_MS = 300;
+/** Products per `GET /crm/products` page ("Load more" fetches the next). */
+export const CRM_PRODUCTS_PAGE_SIZE = 50;
 
 export function useCrmSpaceQuery() {
   return useQuery<CrmSpaceState>({
@@ -60,6 +73,36 @@ export function useWriteCrmWarehouseMutation() {
   const invalidate = useInvalidateCrm();
   return useMutation({
     mutationFn: (input: CrmWarehouseWriteInput) => writeCrmWarehouse(input),
+    onSettled: invalidate,
+  });
+}
+
+/**
+ * Catalog pages for a search. Keyed under the CRM root, so live CRM events
+ * and writes refetch it; the previous result stays on screen while a new
+ * search loads.
+ */
+export function useCrmProductsQuery(filter: { q: string; archived: boolean }) {
+  return useInfiniteQuery({
+    queryKey: ["crm", "products", filter.q, filter.archived],
+    queryFn: ({ pageParam }) =>
+      listCrmProducts({
+        query: filter.q,
+        archived: filter.archived,
+        limit: CRM_PRODUCTS_PAGE_SIZE,
+        after: pageParam,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useWriteCrmProductMutation() {
+  const invalidate = useInvalidateCrm();
+  return useMutation({
+    mutationFn: (input: CrmProductWriteInput) => writeCrmProduct(input),
     onSettled: invalidate,
   });
 }
