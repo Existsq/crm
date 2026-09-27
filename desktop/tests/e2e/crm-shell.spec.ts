@@ -189,3 +189,64 @@ test("a stale settings save shows the conflict message and keeps the draft", asy
     "off",
   );
 });
+
+test("a settings change arriving during an edit is a conflict with a way back", async ({
+  page,
+}) => {
+  await openCrm(page, memberSeed("owner"));
+  const form = page.getByTestId("crm-settings-form");
+  await form.getByTestId("crm-settings-fiscalization").selectOption("off");
+  // Another client saves different settings and this client refetches them.
+  await page.evaluate(
+    ({ channelId, warehouse }) =>
+      window.__BUZZ_E2E_SEED_CRM__?.({
+        space: {
+          channelId,
+          role: "owner",
+          settings: { fiscalization: "optional" },
+          warehouses: [{ id: warehouse, name: "Основной склад" }],
+        },
+      }),
+    { channelId: SPACE_CHANNEL, warehouse: MAIN_WAREHOUSE },
+  );
+  await page.getByRole("button", { name: "Обновить данные CRM" }).click();
+  await expect(form.getByTestId("crm-settings-fiscalization")).toHaveValue(
+    "off",
+  );
+
+  // Saving must not overwrite the newer settings.
+  await form.getByTestId("crm-settings-save").click();
+  await expect(form.getByTestId("crm-settings-error")).toContainText(
+    "Данные изменились",
+  );
+  await expect(form.getByTestId("crm-settings-save")).toBeDisabled();
+
+  await form.getByTestId("crm-settings-reload").click();
+  await expect(form.getByTestId("crm-settings-fiscalization")).toHaveValue(
+    "optional",
+  );
+  await expect(form.getByTestId("crm-settings-error")).toHaveCount(0);
+  await expect(form.getByTestId("crm-settings-reload")).toHaveCount(0);
+});
+
+test("a warehouse create retried after a lost response is not duplicated", async ({
+  page,
+}) => {
+  await openCrm(page, {
+    ...memberSeed("owner"),
+    loseNextWriteResponse: true,
+  });
+  const warehouses = page.getByTestId("crm-warehouses");
+  await warehouses.getByTestId("crm-warehouse-add").click();
+  const dialog = page.getByTestId("crm-warehouse-dialog");
+  await waitForAnimations(page);
+  await dialog.getByTestId("crm-warehouse-dialog-name").fill("Магазин");
+  await dialog.getByTestId("crm-warehouse-dialog-submit").click();
+  // The relay applied the create but the response was lost.
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await dialog.getByTestId("crm-warehouse-dialog-submit").click();
+  await expect(dialog.getByRole("alert")).toContainText("Данные изменились");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(warehouses.getByText("Магазин", { exact: true })).toHaveCount(1);
+});

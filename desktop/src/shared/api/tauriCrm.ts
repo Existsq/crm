@@ -69,8 +69,11 @@ export type CrmWriteResult = {
 
 export type CrmWarehouseWriteInput = {
   channelId: string;
-  /** `null` creates a new warehouse. */
-  warehouseId: string | null;
+  /**
+   * Warehouse id. For a create, pick it once when the dialog opens
+   * (`crypto.randomUUID()`) so a retry cannot create a duplicate.
+   */
+  warehouseId: string;
   name: string;
   isDefault: boolean;
   archived: boolean;

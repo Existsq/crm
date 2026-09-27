@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { useUpdateCrmSettingsMutation } from "@/features/crm/hooks";
 import { ru } from "@/features/crm/i18n/ru";
+import { describeCrmError } from "@/features/crm/lib/crmErrors";
 import { crmTimezoneOptions } from "@/features/crm/lib/crmTimezones";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
 import type {
@@ -38,25 +39,40 @@ function sameSettings(a: CrmSettings, b: CrmSettings) {
 export function CrmSettingsForm({ space }: { space: CrmMemberSpace }) {
   const canManage = space.capabilities.has("manage_space");
   const [draft, setDraft] = React.useState<CrmSettings>(space.settings);
-  const [baseline, setBaseline] = React.useState<CrmSettings>(space.settings);
+  // The revision the draft is based on. Saving sends it as the CAS key, so a
+  // change made elsewhere while the user edits is a conflict, never a silent
+  // overwrite.
+  const [base, setBase] = React.useState({
+    settings: space.settings,
+    revision: space.revision,
+  });
   const update = useUpdateCrmSettingsMutation();
   const dirty = !sameSettings(draft, space.settings);
+  const conflicted =
+    update.error !== null && describeCrmError(update.error).kind === "conflict";
 
-  // Adopt settings changed elsewhere unless the user has unsaved edits; after a
-  // conflict the draft (and the error explaining it) stay until they save again.
-  if (!sameSettings(baseline, space.settings)) {
-    setBaseline(space.settings);
-    if (sameSettings(draft, baseline)) setDraft(space.settings);
+  // Adopt settings changed elsewhere unless the user has unsaved edits.
+  if (base.revision !== space.revision && sameSettings(draft, base.settings)) {
+    setBase({ settings: space.settings, revision: space.revision });
+    setDraft(space.settings);
+  }
+
+  function reloadLatest() {
+    update.reset();
+    setBase({ settings: space.settings, revision: space.revision });
+    setDraft(space.settings);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const saving = draft;
     try {
-      await update.mutateAsync({
+      const result = await update.mutateAsync({
         channelId: space.channelId,
-        settings: draft,
-        expectedRevision: space.revision,
+        settings: saving,
+        expectedRevision: base.revision,
       });
+      setBase({ settings: saving, revision: result.eventId });
       toast.success(ru.settings.saved);
     } catch {
       // Rendered through the mutation error state.
@@ -180,13 +196,25 @@ export function CrmSettingsForm({ space }: { space: CrmMemberSpace }) {
       <CrmErrorAlert error={update.error} testId="crm-settings-error" />
 
       {canManage ? (
-        <Button
-          data-testid="crm-settings-save"
-          disabled={!dirty || update.isPending}
-          type="submit"
-        >
-          {update.isPending ? ru.common.saving : ru.common.save}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            data-testid="crm-settings-save"
+            disabled={!dirty || update.isPending || conflicted}
+            type="submit"
+          >
+            {update.isPending ? ru.common.saving : ru.common.save}
+          </Button>
+          {conflicted ? (
+            <Button
+              data-testid="crm-settings-reload"
+              onClick={reloadLatest}
+              type="button"
+              variant="outline"
+            >
+              {ru.settings.reloadLatest}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </form>
   );

@@ -35,10 +35,13 @@ type MockCrmState = {
     role: CrmRole | null;
     warehouses: MockWarehouse[];
   } | null;
+  /** Apply the next write, then fail as if its response was lost. */
+  loseNextWriteResponse: boolean;
 };
 
 export type MockCrmSeed = {
   canCreate?: boolean;
+  loseNextWriteResponse?: boolean;
   space?: {
     channelId: string;
     role: CrmRole | null;
@@ -93,7 +96,11 @@ const DEFAULT_SETTINGS: RawSettings = {
   default_vat: "vat22",
 };
 
-let state: MockCrmState = { canCreate: true, space: null };
+let state: MockCrmState = {
+  canCreate: true,
+  space: null,
+  loseNextWriteResponse: false,
+};
 
 function revision(): string {
   const bytes = new Uint8Array(32);
@@ -102,12 +109,13 @@ function revision(): string {
 }
 
 export function resetMockCrm(): void {
-  state = { canCreate: true, space: null };
+  state = { canCreate: true, space: null, loseNextWriteResponse: false };
 }
 
 export function seedMockCrm(seed: MockCrmSeed): void {
   state = {
     canCreate: seed.canCreate ?? true,
+    loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
     space: seed.space
       ? {
           channelId: seed.space.channelId,
@@ -170,7 +178,7 @@ type UpdateSpacePayload = {
 type WriteWarehousePayload = {
   input: {
     channel_id: string;
-    warehouse_id: string | null;
+    warehouse_id: string;
     name: string;
     is_default: boolean;
     archived: boolean;
@@ -240,8 +248,11 @@ function writeWarehouse({ input }: WriteWarehousePayload) {
   if (!space)
     throw "relay error 400: invalid: this channel is not the CRM space";
   const eventId = revision();
-  if (input.warehouse_id === null) {
-    const id = crypto.randomUUID();
+  if (input.expected_revision === null) {
+    const id = input.warehouse_id;
+    if (space.warehouses.some((w) => w.id === id)) {
+      throw "relay error 409: conflict: warehouse already exists; send expected-revision to update it";
+    }
     if (input.is_default) {
       demoteDefault(space.warehouses, id, eventId);
     }
@@ -274,6 +285,14 @@ function writeWarehouse({ input }: WriteWarehousePayload) {
   return { event_id: eventId, entity_id: current.id };
 }
 
+function loseResponseIfArmed<T>(value: T): T {
+  if (state.loseNextWriteResponse) {
+    state.loseNextWriteResponse = false;
+    throw "relay unreachable: connection reset after the event was sent";
+  }
+  return value;
+}
+
 /**
  * Handle a `crm_*` command, or return `undefined` for anything else so the
  * main bridge can report the command as unsupported.
@@ -290,7 +309,11 @@ export function handleCrmMockCommand(
     case "crm_update_space":
       return { value: updateSpace(payload as UpdateSpacePayload) };
     case "crm_write_warehouse":
-      return { value: writeWarehouse(payload as WriteWarehousePayload) };
+      return {
+        value: loseResponseIfArmed(
+          writeWarehouse(payload as WriteWarehousePayload),
+        ),
+      };
     default:
       return undefined;
   }

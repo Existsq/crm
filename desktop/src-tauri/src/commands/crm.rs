@@ -28,12 +28,13 @@ pub struct CrmWriteWire {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CrmWarehouseWriteInput {
     pub channel_id: String,
-    /// `None` creates a new warehouse with a fresh id.
-    pub warehouse_id: Option<String>,
+    /// Warehouse id. For a create the client picks it once per dialog, so a
+    /// retry after a lost response cannot create a second warehouse.
+    pub warehouse_id: String,
     pub name: String,
     pub is_default: bool,
     pub archived: bool,
-    /// Required when `warehouse_id` is set.
+    /// Current revision for an update; `None` creates the warehouse.
     pub expected_revision: Option<String>,
 }
 
@@ -113,17 +114,8 @@ fn warehouse_builder(
     input: &CrmWarehouseWriteInput,
 ) -> Result<(nostr::EventBuilder, uuid::Uuid), String> {
     let channel = parse_uuid(&input.channel_id, "channel id")?;
-    let (warehouse_id, expected_revision) =
-        match (&input.warehouse_id, input.expected_revision.as_deref()) {
-            (None, None) => (uuid::Uuid::new_v4(), None),
-            (Some(id), Some(revision)) => (parse_uuid(id, "warehouse id")?, Some(revision)),
-            (None, Some(_)) => {
-                return Err("invalid: a new warehouse cannot carry a revision".to_string())
-            }
-            (Some(_), None) => {
-                return Err("invalid: updating a warehouse needs its current revision".to_string())
-            }
-        };
+    let warehouse_id = parse_uuid(&input.warehouse_id, "warehouse id")?;
+    let expected_revision = input.expected_revision.as_deref();
     let builder = buzz_sdk_pkg::build_crm_warehouse(
         channel,
         warehouse_id,
@@ -140,10 +132,10 @@ fn warehouse_builder(
 mod tests {
     use super::*;
 
-    fn input(warehouse_id: Option<&str>, revision: Option<&str>) -> CrmWarehouseWriteInput {
+    fn input(warehouse_id: &str, revision: Option<&str>) -> CrmWarehouseWriteInput {
         CrmWarehouseWriteInput {
             channel_id: uuid::Uuid::new_v4().to_string(),
-            warehouse_id: warehouse_id.map(str::to_string),
+            warehouse_id: warehouse_id.to_string(),
             name: "Склад".to_string(),
             is_default: false,
             archived: false,
@@ -160,10 +152,12 @@ mod tests {
     }
 
     #[test]
-    fn create_gets_a_fresh_id_and_no_revision() {
-        let (builder, id) = warehouse_builder(&input(None, None)).unwrap();
+    fn create_uses_the_client_id_and_no_revision() {
+        let id = uuid::Uuid::new_v4().to_string();
+        let (builder, built_id) = warehouse_builder(&input(&id, None)).unwrap();
         let event = builder.sign_with_keys(&nostr::Keys::generate()).unwrap();
-        assert_eq!(tag(&event, "crm-id"), Some(id.to_string()));
+        assert_eq!(built_id.to_string(), id);
+        assert_eq!(tag(&event, "crm-id"), Some(id));
         assert_eq!(tag(&event, "expected-revision"), None);
     }
 
@@ -171,16 +165,16 @@ mod tests {
     fn update_keeps_id_and_carries_revision() {
         let id = uuid::Uuid::new_v4().to_string();
         let revision = "ab".repeat(32);
-        let (builder, built_id) = warehouse_builder(&input(Some(&id), Some(&revision))).unwrap();
+        let (builder, built_id) = warehouse_builder(&input(&id, Some(&revision))).unwrap();
         let event = builder.sign_with_keys(&nostr::Keys::generate()).unwrap();
         assert_eq!(built_id.to_string(), id);
         assert_eq!(tag(&event, "expected-revision"), Some(revision));
     }
 
     #[test]
-    fn mismatched_id_and_revision_are_rejected() {
-        assert!(warehouse_builder(&input(None, Some(&"ab".repeat(32)))).is_err());
-        assert!(warehouse_builder(&input(Some(&uuid::Uuid::new_v4().to_string()), None)).is_err());
-        assert!(warehouse_builder(&input(Some("not-a-uuid"), Some(&"ab".repeat(32)))).is_err());
+    fn malformed_ids_and_revisions_are_rejected() {
+        assert!(warehouse_builder(&input("not-a-uuid", None)).is_err());
+        let id = uuid::Uuid::new_v4().to_string();
+        assert!(warehouse_builder(&input(&id, Some("not-hex"))).is_err());
     }
 }

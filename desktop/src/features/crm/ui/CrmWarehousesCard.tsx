@@ -19,7 +19,8 @@ import { SectionHeader } from "@/shared/ui/PageHeader";
 
 type DialogState =
   | { mode: "closed" }
-  | { mode: "create" }
+  // The id is chosen once per dialog so a retried create reuses it.
+  | { mode: "create"; warehouseId: string }
   | { mode: "rename"; warehouse: CrmWarehouse };
 
 export function CrmWarehousesCard({ space }: { space: CrmMemberSpace }) {
@@ -28,6 +29,7 @@ export function CrmWarehousesCard({ space }: { space: CrmMemberSpace }) {
   const [dialog, setDialog] = React.useState<DialogState>({ mode: "closed" });
 
   async function save(
+    warehouseId: string,
     warehouse: CrmWarehouse | null,
     patch: { name?: string; isDefault?: boolean; archived?: boolean },
     successMessage: string,
@@ -35,7 +37,7 @@ export function CrmWarehousesCard({ space }: { space: CrmMemberSpace }) {
     try {
       await write.mutateAsync({
         channelId: space.channelId,
-        warehouseId: warehouse?.id ?? null,
+        warehouseId,
         name: patch.name ?? warehouse?.name ?? "",
         isDefault: patch.isDefault ?? warehouse?.isDefault ?? false,
         archived: patch.archived ?? warehouse?.archived ?? false,
@@ -63,7 +65,10 @@ export function CrmWarehousesCard({ space }: { space: CrmMemberSpace }) {
               data-testid="crm-warehouse-add"
               onClick={() => {
                 write.reset();
-                setDialog({ mode: "create" });
+                setDialog({
+                  mode: "create",
+                  warehouseId: crypto.randomUUID(),
+                });
               }}
               size="sm"
               variant="outline"
@@ -121,6 +126,7 @@ export function CrmWarehousesCard({ space }: { space: CrmMemberSpace }) {
                           data-testid="crm-warehouse-make-default"
                           onSelect={() =>
                             void save(
+                              warehouse.id,
                               warehouse,
                               { isDefault: true },
                               ru.warehouses.updated,
@@ -133,6 +139,7 @@ export function CrmWarehousesCard({ space }: { space: CrmMemberSpace }) {
                         <DropdownMenuItem
                           onSelect={() =>
                             void save(
+                              warehouse.id,
                               warehouse,
                               { archived: true },
                               ru.warehouses.archived,
@@ -163,15 +170,23 @@ export function CrmWarehousesCard({ space }: { space: CrmMemberSpace }) {
         onOpenChange={(open) => {
           if (!open) setDialog({ mode: "closed" });
         }}
-        onSubmit={(name) =>
-          void save(
-            dialog.mode === "rename" ? dialog.warehouse : null,
-            { name },
-            dialog.mode === "rename"
-              ? ru.warehouses.updated
-              : ru.warehouses.created,
-          )
-        }
+        onSubmit={(name) => {
+          if (dialog.mode === "rename") {
+            void save(
+              dialog.warehouse.id,
+              dialog.warehouse,
+              { name },
+              ru.warehouses.updated,
+            );
+          } else if (dialog.mode === "create") {
+            void save(
+              dialog.warehouseId,
+              null,
+              { name },
+              ru.warehouses.created,
+            );
+          }
+        }}
         open={dialogOpen}
         pending={write.isPending}
       />
