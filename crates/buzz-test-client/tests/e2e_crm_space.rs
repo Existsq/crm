@@ -222,6 +222,44 @@ fn warehouse_event(
     )
 }
 
+fn warehouse_event_with(
+    keys: &Keys,
+    channel: Uuid,
+    id: Uuid,
+    payload: Value,
+    expected_revision: Option<&str>,
+) -> nostr::Event {
+    let mut tags = vec![
+        tag(&["h", &channel.to_string()]),
+        tag(&["crm-id", &id.to_string()]),
+    ];
+    if let Some(revision) = expected_revision {
+        tags.push(tag(&["expected-revision", revision]));
+    }
+    sign(keys, KIND_CRM_WAREHOUSE, &payload.to_string(), tags)
+}
+
+fn warehouse_revision(space: &Value, id: Uuid) -> Option<String> {
+    space["warehouses"]
+        .as_array()?
+        .iter()
+        .find(|w| w["id"] == json!(id))
+        .and_then(|w| w["revision"].as_str().map(str::to_string))
+}
+
+async fn get_space_status(keys: Option<&Keys>) -> u16 {
+    let mut request = http().get(format!("{}/crm/space", relay_http_url()));
+    if let Some(keys) = keys {
+        request = request.header("X-Pubkey", keys.public_key().to_hex());
+    }
+    request
+        .send()
+        .await
+        .expect("GET /crm/space")
+        .status()
+        .as_u16()
+}
+
 #[tokio::test]
 #[ignore = "requires a running relay and its Postgres"]
 async fn crm_space_lifecycle_and_access() {
@@ -369,13 +407,13 @@ async fn crm_space_lifecycle_and_access() {
     );
     let (_, accepted, message) = submit(&owner, &open_it).await;
     assert!(
-        !accepted && message.contains("must stay private"),
+        !accepted && message == "invalid: the CRM space channel must stay private",
         "{message}"
     );
     let delete_history = sign(&owner, 5, "", vec![tag(&["e", &create.id.to_hex()])]);
     let (_, accepted, message) = submit(&owner, &delete_history).await;
     assert!(
-        !accepted && message.contains("CRM events cannot be deleted"),
+        !accepted && message.starts_with("invalid: CRM events cannot be deleted"),
         "{message}"
     );
 
@@ -437,5 +475,178 @@ async fn crm_space_rejects_open_channels_and_bad_payloads() {
     assert!(!accepted && message.contains("h tag"), "{message}");
 
     assert!(get_space(&owner).await["exists"] == json!(false));
+    cleanup_space(&pool, community).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a running relay and its Postgres"]
+async fn crm_space_cas_roles_and_guards() {
+    let pool = pool().await;
+    let owner = Keys::generate();
+    let guest = Keys::generate();
+    let bot = Keys::generate();
+    let member = Keys::generate();
+
+    let channel = create_channel(&owner, "private").await;
+    let community = community_of(&pool, channel).await;
+    cleanup_space(&pool, community).await;
+    grant_community_role(&pool, community, &owner, "owner").await;
+
+    // Reads need authentication, like the workflow read API.
+    assert_eq!(get_space_status(None).await, 401);
+
+    let main = Uuid::new_v4();
+    let create = space_create(&owner, channel, main);
+    let (_, accepted, message) = submit(&owner, &create).await;
+    assert!(accepted, "{message}");
+
+    // A settings update advances the revision to its own event id; a second
+    // update still holding the old revision is a 409 conflict.
+    let mut changed = settings();
+    changed["fiscalization"] = json!("off");
+    let update = |revision: &str, value: &Value| {
+        sign(
+            &owner,
+            KIND_CRM_SPACE,
+            &json!({"v": 1, "settings": value}).to_string(),
+            vec![
+                tag(&["h", &channel.to_string()]),
+                tag(&["expected-revision", revision]),
+            ],
+        )
+    };
+    let first = update(&create.id.to_hex(), &changed);
+    let (_, accepted, message) = submit(&owner, &first).await;
+    assert!(accepted, "{message}");
+    assert_eq!(
+        get_space(&owner).await["revision"],
+        json!(first.id.to_hex())
+    );
+    let (status, accepted, message) =
+        submit(&owner, &update(&create.id.to_hex(), &settings())).await;
+    assert!(
+        !accepted && status == 409 && message.starts_with("conflict:"),
+        "{status} {message}"
+    );
+
+    // The default warehouse cannot be cleared or archived directly.
+    let clear_default = warehouse_event_with(
+        &owner,
+        channel,
+        main,
+        json!({"v": 1, "name": "Основной склад", "is_default": false}),
+        Some(&create.id.to_hex()),
+    );
+    let (_, accepted, message) = submit(&owner, &clear_default).await;
+    assert!(
+        !accepted && message == "invalid: make another warehouse the default first",
+        "{message}"
+    );
+
+    // Moving the default gives the demoted warehouse a new revision, so the
+    // pre-move revision can no longer re-promote it (lost update).
+    let shop = Uuid::new_v4();
+    let shop_create = warehouse_event_with(
+        &owner,
+        channel,
+        shop,
+        json!({"v": 1, "name": "Магазин"}),
+        None,
+    );
+    assert!(submit(&owner, &shop_create).await.1);
+    let promote = warehouse_event_with(
+        &owner,
+        channel,
+        shop,
+        json!({"v": 1, "name": "Магазин", "is_default": true}),
+        Some(&shop_create.id.to_hex()),
+    );
+    let (_, accepted, message) = submit(&owner, &promote).await;
+    assert!(accepted, "{message}");
+    let space = get_space(&owner).await;
+    assert_eq!(warehouse_revision(&space, main), Some(promote.id.to_hex()));
+    let stale_repromote = warehouse_event_with(
+        &owner,
+        channel,
+        main,
+        json!({"v": 1, "name": "Основной склад", "is_default": true}),
+        Some(&create.id.to_hex()),
+    );
+    let (status, accepted, message) = submit(&owner, &stale_repromote).await;
+    assert!(
+        !accepted && status == 409 && message.starts_with("conflict:"),
+        "{message}"
+    );
+
+    // An archived warehouse disappears from the read model.
+    let archive_main = warehouse_event_with(
+        &owner,
+        channel,
+        main,
+        json!({"v": 1, "name": "Основной склад", "archived": true}),
+        Some(&promote.id.to_hex()),
+    );
+    let (_, accepted, message) = submit(&owner, &archive_main).await;
+    assert!(accepted, "{message}");
+    assert_eq!(warehouse_revision(&get_space(&owner).await, main), None);
+
+    // Guests and bots cannot manage warehouses; members cannot change settings.
+    add_member(&owner, channel, &guest, "guest").await;
+    add_member(&owner, channel, &bot, "bot").await;
+    add_member(&owner, channel, &member, "member").await;
+    for keys in [&guest, &bot] {
+        let event = warehouse_event_with(
+            keys,
+            channel,
+            Uuid::new_v4(),
+            json!({"v": 1, "name": "X"}),
+            None,
+        );
+        let (_, accepted, message) = submit(keys, &event).await;
+        assert!(!accepted && message.starts_with("restricted:"), "{message}");
+    }
+    let member_update = sign(
+        &member,
+        KIND_CRM_SPACE,
+        &json!({"v": 1, "settings": settings()}).to_string(),
+        vec![
+            tag(&["h", &channel.to_string()]),
+            tag(&["expected-revision", &first.id.to_hex()]),
+        ],
+    );
+    let (_, accepted, message) = submit(&member, &member_update).await;
+    assert!(!accepted && message.starts_with("restricted:"), "{message}");
+
+    // A CRM write into a channel that is not the CRM space is invalid.
+    let other = create_channel(&owner, "private").await;
+    let stray = warehouse_event_with(
+        &owner,
+        other,
+        Uuid::new_v4(),
+        json!({"v": 1, "name": "X"}),
+        None,
+    );
+    let (_, accepted, message) = submit(&owner, &stray).await;
+    assert!(
+        !accepted && message == "invalid: this channel is not the CRM space",
+        "{message}"
+    );
+
+    // Channel admins cannot delete CRM history through kind 9005 either.
+    let admin_delete = sign(
+        &owner,
+        9005,
+        "",
+        vec![
+            tag(&["h", &channel.to_string()]),
+            tag(&["e", &shop_create.id.to_hex()]),
+        ],
+    );
+    let (_, accepted, message) = submit(&owner, &admin_delete).await;
+    assert!(
+        !accepted && message.starts_with("invalid: CRM events cannot be deleted"),
+        "{message}"
+    );
+
     cleanup_space(&pool, community).await;
 }
