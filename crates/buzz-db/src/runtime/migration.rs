@@ -703,12 +703,17 @@ mod postgres_tests {
         let mut migrations: Vec<_> = MIGRATOR.iter().collect();
         migrations.sort_by_key(|migration| migration.version);
 
-        assert_eq!(migrations.len(), 49);
+        assert_eq!(migrations.len(), 50);
         assert_eq!(migrations[48].version, 49);
         assert!(migrations[48]
             .sql
             .as_str()
             .contains("idx_thread_metadata_window"));
+        assert_eq!(migrations[49].version, 50);
+        assert!(migrations[49]
+            .sql
+            .as_str()
+            .contains("CREATE TABLE crm_spaces"));
         assert_eq!(migrations[0].version, 1);
         assert_eq!(&*migrations[0].description, "initial schema");
         assert!(migrations[0]
@@ -1833,6 +1838,12 @@ mod postgres_tests {
         let mut expected_fences = migration.fence_attachments.clone();
         expected_fences.remove("product_feedback");
         expected_fences.remove("rate_limit_violations");
+        // Tables introduced after 0029 attach their fence in their own
+        // migration (the contract documented on attach_community_write_fence);
+        // schema.sql must declare exactly the union.
+        for later in MIGRATOR.iter().filter(|m| m.version > 29) {
+            expected_fences.extend(surface(later.sql.as_ref()).fence_attachments);
+        }
         assert_eq!(
             expected_fences, schema.fence_attachments,
             "write-fence attachment targets differ after recovery policy"
@@ -2763,7 +2774,13 @@ mod postgres_tests {
             "all NIP-FI tables must be absent after migration 0044: {present:?}"
         );
 
-        // The deletion catalog must validate with ledger relations gone.
+        // The deletion catalog must validate with ledger relations gone. The
+        // scoped-table manifest describes the head schema, so apply the
+        // migrations after 0044 before validating it.
+        MIGRATOR
+            .run(&pool)
+            .await
+            .expect("migrations after 0044 apply on top of the ledger removal");
         crate::deletion::DeletionStore::new(pool.clone())
             .validate_catalog()
             .await

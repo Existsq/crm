@@ -330,6 +330,19 @@ pub const KIND_REPORT: u32 = 1984;
 /// deployment feedback table, and never stored or fanned out as an event.
 pub const KIND_PRODUCT_FEEDBACK: u32 = 42000;
 
+// CRM / retail (42100–42199) — see docs/nips/NIP-CRM.md and docs/crm/adr/.
+// Regular stored events, `h`-scoped to the community's CRM space channel.
+// The relay projects them into `crm_*` tables in the same transaction.
+/// First kind of the CRM block.
+pub const CRM_KIND_MIN: u32 = 42100;
+/// Last kind of the CRM block.
+pub const CRM_KIND_MAX: u32 = 42199;
+/// CRM space: binds a private channel as the community's CRM workspace
+/// (creation) or replaces its settings (update with `expected-revision`).
+pub const KIND_CRM_SPACE: u32 = 42100;
+/// CRM warehouse revision (create, rename, set default, archive).
+pub const KIND_CRM_WAREHOUSE: u32 = 42101;
+
 // NIP-29 group admin events
 /// NIP-29: Add a user to a group.
 pub const KIND_NIP29_PUT_USER: u32 = 9000;
@@ -663,6 +676,8 @@ pub const ALL_KINDS: &[u32] = &[
     KIND_PRIVATE_MANAGED_AGENT,
     KIND_REPORT,
     KIND_PRODUCT_FEEDBACK,
+    KIND_CRM_SPACE,
+    KIND_CRM_WAREHOUSE,
     KIND_NIP29_PUT_USER,
     KIND_NIP29_REMOVE_USER,
     KIND_NIP29_EDIT_METADATA,
@@ -817,6 +832,14 @@ pub const fn is_identity_archive_request_kind(kind: u32) -> bool {
     matches!(kind, KIND_IA_ARCHIVE_REQUEST | KIND_IA_UNARCHIVE_REQUEST)
 }
 
+/// Returns `true` if `kind` is in the CRM block (42100–42199).
+///
+/// Every CRM kind is ingested by the relay's CRM branch, which rejects kinds
+/// in the block that this build does not handle yet.
+pub const fn is_crm_kind(kind: u32) -> bool {
+    kind >= CRM_KIND_MIN && kind <= CRM_KIND_MAX
+}
+
 /// Returns `true` if `kind` is a Buzz command kind that requires transactional execution.
 pub const fn is_command_kind(kind: u32) -> bool {
     matches!(
@@ -892,6 +915,16 @@ const _: () = assert!(!is_ephemeral(KIND_AGENT_TURN_METRIC));
 const _: () = assert!(!is_replaceable(KIND_AGENT_TURN_METRIC));
 const _: () = assert!(!is_parameterized_replaceable(KIND_AGENT_TURN_METRIC));
 const _: () = assert!(KIND_AGENT_TURN_METRIC <= u16::MAX as u32);
+// CRM kinds are regular stored events: not ephemeral, not replaceable (shared
+// master data must not fork per author), and fit u16.
+const _: () = assert!(CRM_KIND_MAX <= u16::MAX as u32);
+const _: () = assert!(!is_ephemeral(CRM_KIND_MIN) && !is_ephemeral(CRM_KIND_MAX));
+const _: () = assert!(!is_replaceable(CRM_KIND_MIN) && !is_replaceable(CRM_KIND_MAX));
+const _: () = assert!(!is_parameterized_replaceable(CRM_KIND_MIN));
+const _: () = assert!(!is_parameterized_replaceable(CRM_KIND_MAX));
+const _: () = assert!(is_crm_kind(KIND_CRM_SPACE) && is_crm_kind(KIND_CRM_WAREHOUSE));
+const _: () = assert!(!is_crm_kind(KIND_PRODUCT_FEEDBACK));
+
 // Moderation kinds fit u16 and are neither replaceable nor ephemeral:
 // 1984 is a regular event (persisted to the queue, never fanned out);
 // 9040–9044 are direct commands (executed, never stored).

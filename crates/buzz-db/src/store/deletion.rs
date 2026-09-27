@@ -61,6 +61,8 @@ pub const EXPECTED_SCOPED_TABLES: &[&str] = &[
     "channel_members",
     "channels",
     "community_bans",
+    "crm_spaces",
+    "crm_warehouses",
     "delivery_log",
     "event_mentions",
     "events",
@@ -87,6 +89,8 @@ pub const EXPECTED_SCOPED_TABLES: &[&str] = &[
 
 /// Foreign-key-safe child-before-parent order for the PostgreSQL purge.
 pub const PURGE_SCOPED_TABLES: &[&str] = &[
+    "crm_warehouses",
+    "crm_spaces",
     "workflow_approvals",
     "scheduled_workflow_fires",
     "workflow_runs",
