@@ -72,3 +72,13 @@ identity.key
 
 # Helm dependency tarballs — regenerable from Chart.lock via `helm dependency build`
 deploy/charts/*/charts/*.tgz
+
+# graphify knowledge graph: the graph itself is derived (~80 MB) and rebuilt by
+# .claude/hooks/session-start.sh; only curated memory is versioned.
+/graphify-out/*
+!/graphify-out/memory/
+/graphify-out/memory/**/*.tmp
+
+# agent-skills installer artifacts
+/.agents/.skill-lock.json.backup
+/.claude/skills/*/.deps/

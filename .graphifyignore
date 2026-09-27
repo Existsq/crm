@@ -1,0 +1,35 @@
+# graphify knowledge-graph scope (gitignore syntax; merged with .gitignore).
+# Keep the graph focused on the code and docs agents actually navigate.
+# Build/update: `graphify update .` (AST-only, no API key). See AGENTS.md "Project memory".
+
+# Build outputs and dependencies
+target/
+node_modules/
+dist/
+build/
+.dart_tool/
+graphify-out/
+
+# Generated or oversized files that add noise, not structure
+desktop/src/app/routeTree.gen.ts
+desktop/src/testing/e2eBridge.ts
+pnpm-lock.yaml
+Cargo.lock
+*.snap
+
+# Mobile (Dart is not parsed by graphify) and non-product trees
+mobile/
+benchmarks/
+perf/
+deploy/
+bin/
+patches/
+test-fixtures/
+docs/formal/
+docs/assets/
+
+# Mirrored agent skill copies (the .claude/ copies are canonical)
+.agents/
+.codex/
+.goose/
+.claude/skills/
