@@ -792,3 +792,77 @@ persistent automatic addresses. Use the returned label from registration for
 insert/restore/remove. Ambiguous manually typed names must fail visibly without
 clearing the draft in chat, edit, and standalone forum consumers; never fan out
 silently to all identities sharing a name. See `docs/mention-editor.md`.
+
+---
+
+## CRM fork (existsq/crm)
+
+This fork adds retail CRM on top of Buzz: product catalog, warehouse stock,
+customers/suppliers, sales and purchase documents, an ATOL cash register (ККМ
+АТОЛ ДТО10) checkout, and sales analytics. Read [VISION_CRM.md](VISION_CRM.md)
+and the ADRs in [docs/crm/adr/](docs/crm/adr/) before touching CRM code; the
+existing chat/agent surfaces stay as they are.
+
+### Branches and PRs
+
+- Every CRM feature is its own branch (`crm/<feature>`) with a **draft PR**.
+  Branches are stacked: a feature branch starts from the previous one and its
+  PR targets it until that one merges, then it is retargeted to `main`.
+- Commit with `git commit -s` (DCO) using Conventional Commits
+  (`feat(crm): …`, `test(crm): …`).
+- The agent tests its own work (Rust unit + Postgres tests, relay e2e in
+  `crates/buzz-test-client/tests/e2e_crm_*.rs`, desktop `pnpm test`/`typecheck`/
+  `check`, Playwright smoke specs) and gives the human exact manual-test steps.
+  The "Before opening a PR" checklist above still applies; agents never add
+  `buzz-review-completed` themselves.
+
+### Project memory
+
+- **Knowledge graph (graphify).** `graphify-out/graph.json` is derived and not
+  committed; `.claude/hooks/session-start.sh` installs the `graphify` CLI and
+  rebuilds the graph in the background when it is missing. Scope is set in
+  `.graphifyignore`.
+- **Curated memory (committed).** `graphify-out/memory/` holds saved Q&A
+  (`graphify save-result --question … --answer … --nodes … --outcome useful`);
+  save a result whenever a non-obvious codebase fact took real effort to find.
+- **Specs and decisions.** `.specs/` follows the `tlc-spec-driven` skill:
+  `.specs/STATE.md` (project decisions `AD-NNN` + session handoff),
+  `.specs/features/<feature>/` (spec, design, tasks, validation),
+  `.specs/LESSONS.md` (machine-owned; edit through the skill's `lessons.py`).
+- Update the Handoff section of `.specs/STATE.md` at the end of every session.
+
+### Agent skills
+
+Project skills live in `.claude/skills/` (installed with
+`npx @tech-leads-club/agent-skills install -a claude-code -s <skill>`; the lock
+file is `.agents/.skill-lock.json`):
+
+| Need | Skill |
+|------|-------|
+| Feature spec → design → tasks → verified execution | `tlc-spec-driven` |
+| Coding discipline while implementing | `coding-guidelines` |
+| Domain modelling (CRM aggregates, value objects) | `tactical-ddd`, `domain-analysis` |
+| React screens | `react-best-practices`, `react-composition-patterns`, `accessibility` |
+| Browser checks and Playwright | `playwright-skill` |
+| Security review | `security-best-practices` |
+| PR review before leaving draft | `the-judge` (post as a comment review, never Request Changes) |
+| Decisions and docs | `create-adr`, `docs-writer`, `mermaid-studio` |
+
+### CRM conventions
+
+- Event kinds `42100–42199` (see `docs/nips/NIP-CRM.md` once it lands); money in
+  integer kopecks, quantities in integer thousandths (AD-004).
+- CRM UI strings are Russian and live only in
+  `desktop/src/features/crm/i18n/ru.ts` (AD-005).
+- CRM mocks for Playwright live in `desktop/src/testing/e2eBridgeCrm.ts`, never
+  in the oversized `e2eBridge.ts`.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
