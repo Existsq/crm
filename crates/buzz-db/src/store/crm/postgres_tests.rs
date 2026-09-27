@@ -60,6 +60,28 @@ fn rev(byte: u8) -> Vec<u8> {
     vec![byte; 32]
 }
 
+/// Wait until another session is blocked on a lock while running a statement
+/// that mentions `table`, so a race test really interleaves (a fixed sleep
+/// could let the racer finish first and pass vacuously).
+async fn wait_until_blocked_on(db: &Db, table: &str) {
+    for _ in 0..200 {
+        let blocked: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity \
+             WHERE datname = current_database() AND wait_event_type = 'Lock' \
+               AND pid <> pg_backend_pid() AND position($1 in query) > 0)",
+        )
+        .bind(table)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        if blocked {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("no session blocked on {table}: the race did not interleave");
+}
+
 async fn create(fx: &Fixture, warehouse: Uuid) -> SpaceCreateOutcome {
     let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
     let outcome = create_space(
@@ -488,7 +510,7 @@ async fn concurrent_creates_of_one_warehouse_id_admit_exactly_one() {
         tx2.commit().await.unwrap();
         outcome
     });
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    wait_until_blocked_on(&fx.db, "crm_warehouses").await;
     tx1.commit().await.unwrap();
 
     assert_eq!(racer.await.unwrap(), WarehouseWriteOutcome::AlreadyExists);

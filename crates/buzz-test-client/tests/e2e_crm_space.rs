@@ -454,7 +454,7 @@ async fn crm_space_rejects_open_channels_and_bad_payloads() {
     );
     let (_, accepted, message) = submit(&owner, &bad_tz).await;
     assert!(
-        !accepted && message.contains("unknown timezone"),
+        !accepted && message.starts_with("invalid:") && message.contains("unknown timezone"),
         "{message}"
     );
 
@@ -466,13 +466,18 @@ async fn crm_space_rejects_open_channels_and_bad_payloads() {
     );
     let (_, accepted, message) = submit(&owner, &future_version).await;
     assert!(
-        !accepted && message.contains("unsupported CRM payload version 2"),
+        !accepted
+            && message.starts_with("invalid:")
+            && message.contains("unsupported CRM payload version 2"),
         "{message}"
     );
 
     let no_h = sign(&owner, KIND_CRM_SPACE, &json!({"v": 1}).to_string(), vec![]);
     let (_, accepted, message) = submit(&owner, &no_h).await;
-    assert!(!accepted && message.contains("h tag"), "{message}");
+    assert!(
+        !accepted && message.starts_with("invalid:") && message.contains("h tag"),
+        "{message}"
+    );
 
     assert!(get_space(&owner).await["exists"] == json!(false));
     cleanup_space(&pool, community).await;
@@ -589,6 +594,16 @@ async fn crm_space_cas_roles_and_guards() {
     let (_, accepted, message) = submit(&owner, &archive_main).await;
     assert!(accepted, "{message}");
     assert_eq!(warehouse_revision(&get_space(&owner).await, main), None);
+    // ...but `?archived=true` still lists it so it can be restored.
+    let with_archived = get_json(&owner, "/crm/space?archived=true").await;
+    let archived_main = with_archived["warehouses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["id"] == json!(main))
+        .expect("archived warehouse listed");
+    assert_eq!(archived_main["archived"], json!(true));
+    assert_eq!(archived_main["revision"], json!(archive_main.id.to_hex()));
 
     // Guests and bots cannot manage warehouses; members cannot change settings.
     add_member(&owner, channel, &guest, "guest").await;
@@ -647,6 +662,80 @@ async fn crm_space_cas_roles_and_guards() {
         !accepted && message.starts_with("invalid: CRM events cannot be deleted"),
         "{message}"
     );
+
+    cleanup_space(&pool, community).await;
+}
+
+async fn get_json(keys: &Keys, path_and_query: &str) -> Value {
+    let resp = http()
+        .get(format!("{}{path_and_query}", relay_http_url()))
+        .header("X-Pubkey", keys.public_key().to_hex())
+        .send()
+        .await
+        .expect("GET");
+    assert_eq!(resp.status().as_u16(), 200, "GET {path_and_query}");
+    resp.json().await.expect("json")
+}
+
+/// Concurrent moves of the default flag to different warehouses must all
+/// succeed and leave exactly one default: warehouse writes serialize on the
+/// space row. Without that lock the demote-then-set steps interleave and the
+/// one-default unique index turns a valid move into an internal error.
+#[tokio::test]
+#[ignore = "requires a running relay and its Postgres"]
+async fn crm_space_concurrent_default_moves_serialize() {
+    let pool = pool().await;
+    let owner = Keys::generate();
+    let channel = create_channel(&owner, "private").await;
+    let community = community_of(&pool, channel).await;
+    cleanup_space(&pool, community).await;
+    grant_community_role(&pool, community, &owner, "admin").await;
+    let (_, accepted, message) =
+        submit(&owner, &space_create(&owner, channel, Uuid::new_v4())).await;
+    assert!(accepted, "{message}");
+
+    let mut warehouses = Vec::new();
+    for index in 0..8 {
+        let id = Uuid::new_v4();
+        let event = warehouse_event(&owner, channel, id, &format!("Склад {index}"), None);
+        let (_, accepted, message) = submit(&owner, &event).await;
+        assert!(accepted, "{message}");
+        warehouses.push((id, event.id.to_hex()));
+    }
+
+    for round in 0..3 {
+        let space = get_space(&owner).await;
+        let moves: Vec<nostr::Event> = warehouses
+            .iter()
+            .map(|(id, _)| {
+                warehouse_event_with(
+                    &owner,
+                    channel,
+                    *id,
+                    json!({"v": 1, "name": format!("Склад {id}"), "is_default": true}),
+                    Some(&warehouse_revision(&space, *id).expect("live warehouse")),
+                )
+            })
+            .collect();
+        let results =
+            futures_util::future::join_all(moves.iter().map(|event| submit(&owner, event))).await;
+        for (status, accepted, message) in &results {
+            // A move may lose CAS to a concurrent demotion of the same
+            // warehouse (409); it must never fail inside the relay.
+            assert!(
+                *accepted || (*status == 409 && message.starts_with("conflict:")),
+                "round {round}: {status} {message}"
+            );
+        }
+        assert!(results.iter().any(|(_, accepted, _)| *accepted));
+        let defaults = get_space(&owner).await["warehouses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|w| w["is_default"] == json!(true))
+            .count();
+        assert_eq!(defaults, 1, "round {round}");
+    }
 
     cleanup_space(&pool, community).await;
 }

@@ -19,7 +19,7 @@ use buzz_core::TenantContext;
 use buzz_crm::CrmRole;
 
 use crate::{
-    api::{api_error, bridge, internal_error},
+    api::{api_error, bridge, internal_error, parse_query_or_400},
     nip_fi_http::admit_nip_fi_http_on_state,
     state::AppState,
 };
@@ -127,11 +127,19 @@ pub(crate) async fn space_role(
     .transpose()
 }
 
+/// Query parameters of `GET /crm/space`.
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct SpaceParams {
+    /// Include archived warehouses (to restore one).
+    archived: Option<bool>,
+}
+
 /// `GET /crm/space` — the community's CRM space as the caller may see it.
 ///
 /// - no space: `{"exists": false, "can_create": bool}`
 /// - space, caller not a member: `{"exists": true, "member": false}`
-/// - member: settings, revision, role, capabilities and live warehouses.
+/// - member: settings, revision, role, capabilities and live warehouses
+///   (`?archived=true` adds archived ones).
 pub async fn space(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -142,6 +150,12 @@ pub async fn space(
             Ok(reader) => reader,
             Err(response) => return response,
         };
+    // Parse after admission so malformed parameters cannot pre-empt the
+    // authentication contract (same order as the workflow reads).
+    let params: SpaceParams = match parse_query_or_400(raw_query.as_deref()) {
+        Ok(params) => params,
+        Err(response) => return response.into_response(),
+    };
     let community = reader.tenant.community();
 
     let space = match state.db.crm_get_space(community).await {
@@ -171,7 +185,11 @@ pub async fn space(
 
     let warehouses = match state
         .db
-        .crm_list_warehouses(community, space.channel_id, false)
+        .crm_list_warehouses(
+            community,
+            space.channel_id,
+            params.archived.unwrap_or(false),
+        )
         .await
     {
         Ok(rows) => rows,
@@ -252,5 +270,114 @@ mod tests {
             body.get("created_by").is_none(),
             "creator pubkey is not exposed"
         );
+    }
+}
+
+#[cfg(test)]
+mod postgres_tests {
+    use super::*;
+    use axum::{
+        body::{to_bytes, Body},
+        http::Request,
+    };
+    use base64::Engine;
+    use nostr::{EventBuilder, Keys, Kind, Tag};
+    use tower::ServiceExt;
+    use uuid::Uuid;
+
+    fn proof(key: &Keys, host: &str, path_and_query: &str) -> String {
+        let auth = EventBuilder::new(Kind::Custom(27235), "")
+            .tags([
+                Tag::parse(["u", &format!("https://{host}{path_and_query}")]).unwrap(),
+                Tag::parse(["method", "GET"]).unwrap(),
+                Tag::parse(["nonce", &Uuid::new_v4().to_string()]).unwrap(),
+            ])
+            .sign_with_keys(key)
+            .unwrap();
+        format!(
+            "Nostr {}",
+            base64::engine::general_purpose::STANDARD.encode(serde_json::to_vec(&auth).unwrap())
+        )
+    }
+
+    async fn get(
+        state: &Arc<AppState>,
+        host: &str,
+        path_and_query: &str,
+        authorization: Option<String>,
+    ) -> (StatusCode, Value) {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri(path_and_query)
+            .header("host", host);
+        if let Some(authorization) = authorization {
+            request = request.header("authorization", authorization);
+        }
+        let response = crate::router::build_router(state.clone())
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Postgres"]
+    async fn space_read_requires_real_auth_and_relay_membership() {
+        let fixture = crate::api::bridge::postgres_tests::bridge_handler_test_state()
+            .await
+            .expect("isolated Postgres/Redis fixture");
+        let mut state = (*fixture).clone();
+        let config = Arc::make_mut(&mut state.config);
+        config.require_auth_token = true;
+        config.require_relay_membership = true;
+        let state = Arc::new(state);
+        let host = format!("crm-space-{}.local", Uuid::new_v4().simple());
+        let community = state
+            .db
+            .ensure_configured_community(&host)
+            .await
+            .unwrap()
+            .id;
+        let key = Keys::generate();
+
+        let anonymous = get(&state, &host, SPACE_PATH, None).await;
+        assert_eq!(anonymous.0, StatusCode::UNAUTHORIZED, "{}", anonymous.1);
+
+        let denied = get(
+            &state,
+            &host,
+            SPACE_PATH,
+            Some(proof(&key, &host, SPACE_PATH)),
+        )
+        .await;
+        assert_eq!(denied.0, StatusCode::FORBIDDEN, "{}", denied.1);
+        assert_eq!(denied.1["error"], "relay_membership_required");
+
+        state
+            .db
+            .add_relay_member(community, &key.public_key().to_hex(), "member", None)
+            .await
+            .unwrap();
+        let admitted = get(
+            &state,
+            &host,
+            SPACE_PATH,
+            Some(proof(&key, &host, SPACE_PATH)),
+        )
+        .await;
+        assert_eq!(admitted.0, StatusCode::OK, "{}", admitted.1);
+        assert_eq!(admitted.1, json!({"exists": false, "can_create": false}));
+
+        // Query validation runs after admission.
+        let bad = "/crm/space?archived=maybe";
+        let rejected = get(&state, &host, bad, Some(proof(&key, &host, bad))).await;
+        assert_eq!(rejected.0, StatusCode::BAD_REQUEST, "{}", rejected.1);
+        let anonymous_bad = get(&state, &host, bad, None).await;
+        assert_eq!(anonymous_bad.0, StatusCode::UNAUTHORIZED);
     }
 }

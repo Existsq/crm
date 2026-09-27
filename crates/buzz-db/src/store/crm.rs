@@ -199,8 +199,8 @@ pub async fn timezone_exists(tx: &mut Transaction<'_, Postgres>, name: &str) -> 
     )
 }
 
-/// The space bound to `channel_id`, locked `FOR UPDATE` (settings writes) or
-/// `FOR SHARE` (every other CRM write).
+/// The space bound to `channel_id`, locked `FOR UPDATE` (`exclusive`: settings
+/// and warehouse writes, which must serialize per space) or `FOR SHARE`.
 pub async fn space_for_write(
     tx: &mut Transaction<'_, Postgres>,
     community: CommunityId,
