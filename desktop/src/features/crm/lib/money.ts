@@ -157,3 +157,13 @@ export function lineAmount(priceMinor: number, qtyMilli: number): number {
   }
   return Number(rounded);
 }
+
+const RUB_COMPACT_FORMAT = new Intl.NumberFormat("ru-RU", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** Kopecks as a short ru-RU axis label (compact notation, e.g. 1.3 million). */
+export function formatRublesCompact(minor: number): string {
+  return `${RUB_COMPACT_FORMAT.format(minor / 100)} ₽`;
+}

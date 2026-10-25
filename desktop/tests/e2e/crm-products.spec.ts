@@ -272,7 +272,7 @@ test("a role without edit_catalog sees the catalog read-only", async ({
 test("a product can be created with the keyboard alone", async ({ page }) => {
   await openCatalog(page, seed("owner", []));
   const add = page.getByTestId("crm-product-add");
-  await page.getByTestId("crm-section-settings").focus();
+  await page.getByTestId("crm-refresh").focus();
   await page.keyboard.press("Tab");
   await expect(add).toBeFocused();
   await page.keyboard.press("Enter");

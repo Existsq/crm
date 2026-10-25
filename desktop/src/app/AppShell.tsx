@@ -902,7 +902,7 @@ export function AppShell() {
                           onSelectPulse={() => void goPulse()}
                           onSelectSettings={handleOpenSettings}
                           onSelectWorkflows={() => void goWorkflows()}
-                          onSelectCrm={() => void goCrm()}
+                          onSelectCrm={(section) => void goCrm(section)}
                           onSetPresenceStatus={(status) =>
                             presenceSession.setStatus(status)
                           }

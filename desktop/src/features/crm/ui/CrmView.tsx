@@ -16,11 +16,9 @@ import { CrmSpaceGate } from "@/features/crm/ui/CrmSpaceGate";
 import type { CrmMemberSpace } from "@/shared/api/tauriCrm";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
-import { PageHeader } from "@/shared/ui/PageHeader";
 
 type CrmViewProps = {
   section: CrmSectionId;
-  onSelectSection: (section: CrmSectionId) => void;
 };
 
 function CrmSectionContent({
@@ -46,7 +44,7 @@ function CrmSectionContent({
   }
 }
 
-export function CrmView({ section, onSelectSection }: CrmViewProps) {
+export function CrmView({ section }: CrmViewProps) {
   const spaceQuery = useCrmSpaceQuery();
   const space = spaceQuery.data;
   useCrmLiveUpdates(space?.status === "member" ? space.channelId : null);
@@ -57,58 +55,34 @@ export function CrmView({ section, onSelectSection }: CrmViewProps) {
       data-testid="crm-view"
     >
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-7 sm:px-6 sm:py-8"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-5 sm:px-6 sm:py-6"
         data-scroll-restoration-id="crm"
       >
         <div className="mx-auto w-full max-w-6xl space-y-6 [container-type:inline-size]">
-          <PageHeader
-            action={
-              <Button
-                aria-label={ru.shell.refreshLabel}
-                disabled={spaceQuery.isFetching}
-                onClick={() => void spaceQuery.refetch()}
-                size="icon"
-                variant="ghost"
-              >
-                <RefreshCw
-                  className={cn(
-                    "h-4 w-4",
-                    spaceQuery.isFetching && "animate-spin",
-                  )}
-                />
-              </Button>
-            }
-            description={ru.shell.description}
-            title={ru.shell.title}
-          />
-
-          {space?.status === "member" ? (
-            <nav
-              aria-label={ru.shell.sectionsLabel}
-              className="flex gap-1 border-b border-border/60"
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-sm font-medium text-muted-foreground">
+              {ru.shell.title}
+              <span aria-hidden="true"> · </span>
+              <span className="sr-only"> </span>
+              {CRM_SECTIONS.find((item) => item.id === section)?.label}
+            </h1>
+            <Button
+              aria-label={ru.shell.refreshLabel}
+              className="h-8 w-8"
+              data-testid="crm-refresh"
+              disabled={spaceQuery.isFetching}
+              onClick={() => void spaceQuery.refetch()}
+              size="icon"
+              variant="ghost"
             >
-              {CRM_SECTIONS.map((item) => {
-                const active = item.id === section;
-                return (
-                  <button
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "-mb-px border-b-2 px-3 py-2 text-sm transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
-                      active
-                        ? "border-primary font-medium text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground",
-                    )}
-                    data-testid={`crm-section-${item.id}`}
-                    key={item.id}
-                    onClick={() => onSelectSection(item.id)}
-                    type="button"
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </nav>
-          ) : null}
+              <RefreshCw
+                className={cn(
+                  "h-4 w-4",
+                  spaceQuery.isFetching && "animate-spin",
+                )}
+              />
+            </Button>
+          </div>
 
           <CrmSpaceGate query={spaceQuery}>
             {(memberSpace) => (

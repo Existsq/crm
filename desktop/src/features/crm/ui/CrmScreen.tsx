@@ -8,10 +8,7 @@ const CrmView = React.lazy(async () => {
   return { default: module.CrmView };
 });
 
-export function CrmScreen(props: {
-  section: CrmSectionId;
-  onSelectSection: (section: CrmSectionId) => void;
-}) {
+export function CrmScreen(props: { section: CrmSectionId }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <React.Suspense fallback={<ViewLoadingFallback kind="crm" />}>

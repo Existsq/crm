@@ -4,7 +4,6 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import {
   DEFAULT_CRM_SECTION,
   parseCrmSection,
-  type CrmSectionId,
 } from "@/features/crm/lib/crmSections";
 import { usePreviewFeatureWarning } from "@/shared/features";
 import { ViewLoadingFallback } from "@/shared/ui/ViewLoadingFallback";
@@ -29,18 +28,12 @@ export const Route = createFileRoute("/crm/$section")({
 
 function CrmRouteComponent() {
   usePreviewFeatureWarning("crm");
-  const navigate = Route.useNavigate();
   const { section } = Route.useParams();
   const current = parseCrmSection(section) ?? DEFAULT_CRM_SECTION;
 
   return (
     <React.Suspense fallback={<ViewLoadingFallback kind="crm" />}>
-      <CrmScreen
-        onSelectSection={(next: CrmSectionId) => {
-          void navigate({ to: "/crm/$section", params: { section: next } });
-        }}
-        section={current}
-      />
+      <CrmScreen section={current} />
     </React.Suspense>
   );
 }

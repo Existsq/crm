@@ -1,3 +1,4 @@
+import type { CrmSectionId } from "@/features/crm/lib/crmSections";
 import type { AddCommunityPrefillRequest } from "@/features/communities/addCommunityPrefill";
 import type { LeaveCommunityResult } from "@/features/communities/leaveCommunity";
 import type { Community } from "@/features/communities/types";
@@ -89,7 +90,7 @@ export type AppSidebarProps = {
   onSelectProjects: () => void;
   onSelectPulse: () => void;
   onSelectWorkflows: () => void;
-  onSelectCrm: () => void;
+  onSelectCrm: (section?: CrmSectionId) => void;
   onSelectHome: () => void;
   onSelectChannel: (channelId: string) => void;
   onOpenSearchResult: (hit: SearchHit, query: string) => void;

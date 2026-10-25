@@ -1,5 +1,7 @@
 import { Activity, Bot, Folders, Inbox, Store, Zap } from "lucide-react";
+import type { CrmSectionId } from "@/features/crm/lib/crmSections";
 
+import { CrmSidebarSections } from "@/features/crm/ui/CrmSidebarSections";
 import { TopbarSearch } from "@/features/search/ui/TopbarSearch";
 import { SidebarProjectsSection } from "@/features/sidebar/ui/SidebarProjectsSection";
 import { FeatureGate } from "@/shared/features";
@@ -47,7 +49,7 @@ type AppSidebarPrimaryMenuProps = {
   onSelectProjects: () => void;
   onSelectPulse: () => void;
   onSelectWorkflows: () => void;
-  onSelectCrm: () => void;
+  onSelectCrm: (section?: CrmSectionId) => void;
   projectsOverviewActive: boolean;
   selectedView: SidebarSelectedView;
 };
@@ -189,15 +191,18 @@ export function AppSidebarPrimaryMenu({
           <FeatureGate feature="crm">
             <SidebarMenuItem>
               <SidebarMenuButton
+                // The active section sub-item carries the highlight.
+                className="data-[active=true]:bg-transparent data-[active=true]:hover:bg-sidebar-accent"
                 data-testid="open-crm-view"
                 isActive={selectedView === "crm"}
-                onClick={onSelectCrm}
+                onClick={() => onSelectCrm()}
                 tooltip="CRM"
                 type="button"
               >
                 <Store className="h-4 w-4" />
                 <SidebarMenuLabel>CRM</SidebarMenuLabel>
               </SidebarMenuButton>
+              <CrmSidebarSections onSelect={onSelectCrm} />
             </SidebarMenuItem>
           </FeatureGate>
         </SidebarMenu>

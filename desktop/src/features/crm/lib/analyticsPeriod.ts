@@ -65,3 +65,40 @@ export function fillDays(
 export function percent(part: number, whole: number): number {
   return whole > 0 ? Math.round((part / whole) * 100) : 0;
 }
+
+/** The period of the same length right before `period` (for comparison). */
+export function previousPeriod(period: { from: string; to: string }): {
+  from: string;
+  to: string;
+} {
+  const from = new Date(`${period.from}T00:00:00Z`).getTime();
+  const to = new Date(`${period.to}T00:00:00Z`).getTime();
+  const days = Math.round((to - from) / 86_400_000) + 1;
+  return { from: addDays(period.from, -days), to: addDays(period.from, -1) };
+}
+
+/**
+ * Relative change from `previous` to `current` in whole percent, or `null`
+ * when there is nothing to compare against.
+ */
+export function changePercent(
+  current: number,
+  previous: number,
+): number | null {
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+/**
+ * Axis ticks from zero to a round maximum at or above `max`, e.g. `0, 5000,
+ * 10000, 15000` for 13 400. Always three gaps, so grid lines stay sparse.
+ */
+export function niceTicks(max: number): number[] {
+  if (max <= 0) return [0];
+  const rough = max / 3;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step =
+    [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ??
+    10 * magnitude;
+  return [0, step, step * 2, step * 3];
+}

@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { CrmSectionId } from "@/features/crm/lib/crmSections";
 import {
   useCanGoBack,
   useLocation,
@@ -187,11 +188,9 @@ export function useAppNavigation() {
   );
 
   const goCrm = React.useCallback(
-    (behavior?: NavigationBehavior) =>
+    (section?: CrmSectionId, behavior?: NavigationBehavior) =>
       commitNavigation(
-        {
-          to: "/crm",
-        },
+        section ? { to: "/crm/$section", params: { section } } : { to: "/crm" },
         behavior,
       ),
     [commitNavigation],
