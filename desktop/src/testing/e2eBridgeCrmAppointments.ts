@@ -18,6 +18,8 @@ import { mockCrmProductById } from "./e2eBridgeCrmProducts.ts";
 import { mockCrmPartyById } from "./e2eBridgeCrmSales.ts";
 import {
   mockCrmActiveStaff,
+  mockCrmAllStaff,
+  mockCrmStaffDays,
   mockCrmStaffById,
   mockCrmStaffIntervals,
 } from "./e2eBridgeCrmStaff.ts";
@@ -338,6 +340,86 @@ export function unpayMockAppointment(saleId: string): void {
   );
 }
 
+function visitAnalytics(
+  p: { from?: string | null; to?: string | null },
+  access: MockCrmAppointmentAccess,
+) {
+  requireMember(access);
+  const to = p.to ?? new Date().toISOString().slice(0, 10);
+  const from = p.from ?? to;
+  const inPeriod = appointments.filter((a) => a.date >= from && a.date <= to);
+  const held = inPeriod.filter((a) => holdsTime(a.status));
+  const staff = mockCrmAllStaff()
+    .map((s) => {
+      const mine = inPeriod.filter((a) => a.staff_id === s.id);
+      const kept = mine.filter((a) => holdsTime(a.status));
+      const done = mine.filter((a) => a.status === "done");
+      return {
+        staff_id: s.id,
+        name: s.name,
+        archived: s.archived,
+        visits: kept.length,
+        done: done.length,
+        no_shows: mine.filter((a) => a.status === "no_show").length,
+        cancelled: mine.filter((a) => a.status === "cancelled").length,
+        revenue_minor: done.reduce((sum, a) => sum + a.total_minor, 0),
+        booked_min: kept.reduce((sum, a) => sum + a.end - a.start, 0),
+        worked_min: mockCrmStaffDays()
+          .filter((d) => d.staff_id === s.id && d.date >= from && d.date <= to)
+          .flatMap((d) => d.intervals)
+          .reduce((sum, i) => sum + i.end - i.start, 0),
+        any: mine.length > 0,
+      };
+    })
+    .filter((s) => !s.archived || s.any)
+    .sort((a, b) => b.revenue_minor - a.revenue_minor || b.visits - a.visits)
+    .map(({ archived: _archived, any: _any, ...row }) => row);
+  const services = new Map<
+    string,
+    {
+      product_id: string;
+      name: string;
+      visits: number;
+      revenue_minor: number;
+      minutes: number;
+    }
+  >();
+  for (const visit of held) {
+    for (const s of visit.services) {
+      const row = services.get(s.product_id) ?? {
+        product_id: s.product_id,
+        name: s.name,
+        visits: 0,
+        revenue_minor: 0,
+        minutes: 0,
+      };
+      row.visits += 1;
+      row.revenue_minor += s.price_minor;
+      row.minutes += s.duration_min;
+      services.set(s.product_id, row);
+    }
+  }
+  const clients = new Set(
+    held.flatMap((a) => (a.customer_id ? [a.customer_id] : [])),
+  );
+  const returning = new Set(
+    appointments
+      .filter((a) => a.date < from && holdsTime(a.status) && a.customer_id)
+      .map((a) => a.customer_id),
+  );
+  return {
+    from,
+    to,
+    staff,
+    services: [...services.values()].sort((a, b) => b.visits - a.visits),
+    clients: {
+      clients: clients.size,
+      new_clients: [...clients].filter((id) => !returning.has(id)).length,
+      walk_ins: held.filter((a) => !a.customer_id).length,
+    },
+  };
+}
+
 /** Handle a journal command, or `undefined` for anything else. */
 export function handleCrmAppointmentMockCommand(
   command: string,
@@ -359,6 +441,13 @@ export function handleCrmAppointmentMockCommand(
       if (!visit) throw "relay error 404: appointment not found";
       return { value: withClient(visit) };
     }
+    case "crm_get_visit_analytics":
+      return {
+        value: visitAnalytics(
+          payload as Parameters<typeof visitAnalytics>[0],
+          access,
+        ),
+      };
     case "crm_get_slots":
       return {
         value: getSlots(payload as Parameters<typeof getSlots>[0], access),

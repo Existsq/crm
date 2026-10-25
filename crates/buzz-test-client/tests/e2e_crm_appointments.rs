@@ -296,6 +296,25 @@ async fn appointments_respect_hours_overlaps_and_slots() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["status"], json!("cancelled"));
 
+    // Visit analytics: one visit holding time, one cancelled.
+    let (status, body) = get(
+        Some(&guest),
+        &format!("/crm/analytics/services?from={day}&to={day}"),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let olga_stats = body["staff"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["staff_id"] == json!(olga))
+        .cloned()
+        .expect("olga in staff analytics");
+    assert_eq!(olga_stats["visits"], json!(1), "{body}");
+    assert_eq!(olga_stats["cancelled"], json!(1), "{body}");
+    assert_eq!(olga_stats["worked_min"], json!(600), "{body}");
+    assert_eq!(body["services"][0]["product_id"], json!(haircut), "{body}");
+
     // Reads are bounded and members-only.
     let (status, _) = get(Some(&guest), "/crm/appointments").await;
     assert_eq!(status, 400);

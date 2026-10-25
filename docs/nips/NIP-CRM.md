@@ -285,6 +285,14 @@ with interval bounds in minutes after midnight. `GET /crm/products` takes
 "starts": ["HH:MM"]}]}`: the free start times of every active staff member who
 performs all the services. Past days have no slots; today's start after the
 current time in the space timezone.
+
+`GET /crm/analytics/services?from&to` (same period rules as
+`/crm/analytics`) returns `{"from", "to", "staff": [{"staff_id", "name",
+"visits", "done", "no_shows", "cancelled", "revenue_minor", "booked_min",
+"worked_min"}], "services": [{"product_id", "name", "visits",
+"revenue_minor", "minutes"}], "clients": {"clients", "new_clients",
+"walk_ins"}}`. Visits count when they hold time; revenue counts done visits
+at their booked prices; `worked_min` sums the scheduled intervals.
 `GET /crm/stock?warehouse=<uuid>&q=&low=true` returns `{"warehouse_id",
 "items": [{"product_id", "name", "sku", "unit", "category", "price_minor",
 "min_stock_milli", "qty_milli", "value_minor", "archived"}], "totals":

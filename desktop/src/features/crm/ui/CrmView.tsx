@@ -7,6 +7,7 @@ import {
   type CrmSectionId,
 } from "@/features/crm/lib/crmSections";
 import { CrmAnalyticsSection } from "@/features/crm/ui/analytics/CrmAnalyticsSection";
+import { CrmStaffAnalyticsSection } from "@/features/crm/ui/analytics/CrmStaffAnalyticsSection";
 import { CrmCashSection } from "@/features/crm/ui/cash/CrmCashSection";
 import { CrmJournalSection } from "@/features/crm/ui/journal/CrmJournalSection";
 import { CrmSettingsSection } from "@/features/crm/ui/CrmSettingsSection";
@@ -63,6 +64,8 @@ function CrmSectionContent({
       return <CrmSalesSection space={space} />;
     case "analytics":
       return <CrmAnalyticsSection space={space} />;
+    case "staff-analytics":
+      return <CrmStaffAnalyticsSection space={space} />;
     case "settings":
       return <CrmSettingsSection space={space} />;
   }

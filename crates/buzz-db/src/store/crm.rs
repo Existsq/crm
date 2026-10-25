@@ -3,7 +3,7 @@
 //! [`parties`] (0052), sale documents in [`sales`] (0053) and the read-only
 //! [`analytics`] over them; fiscal receipts and cash shifts in [`fiscal`]
 //! (0054); staff and their working days in [`staff`] (0055); appointments
-//! in [`appointments`] (0056); the stock ledger and service tech cards in
+//! in [`appointments`] (0056) with [`visit_analytics`] over them; the stock ledger and service tech cards in
 //! [`stock`] (0060).
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
@@ -28,6 +28,7 @@ pub mod parties;
 pub mod sales;
 pub mod staff;
 pub mod stock;
+pub mod visit_analytics;
 
 pub use analytics::{AnalyticsPeriod, SalesAnalytics};
 pub use appointments::{

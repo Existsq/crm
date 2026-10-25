@@ -83,6 +83,35 @@ export type CrmSlots = {
   staff: CrmStaffSlots[];
 };
 
+export type CrmStaffVisitStats = {
+  staffId: string;
+  name: string;
+  visits: number;
+  done: number;
+  noShows: number;
+  cancelled: number;
+  revenueMinor: number;
+  bookedMin: number;
+  workedMin: number;
+};
+
+export type CrmServiceVisitStats = {
+  productId: string;
+  name: string;
+  visits: number;
+  revenueMinor: number;
+  minutes: number;
+};
+
+/** `GET /crm/analytics/services`: visits per staff member and service. */
+export type CrmVisitAnalytics = {
+  from: string;
+  to: string;
+  staff: CrmStaffVisitStats[];
+  services: CrmServiceVisitStats[];
+  clients: { clients: number; newClients: number; walkIns: number };
+};
+
 // ── Raw types (snake_case from backend) ───────────────────────────────────
 
 export type RawCrmAppointmentService = {
@@ -246,4 +275,65 @@ export async function writeCrmAppointment(
     input: toRawCrmAppointmentInput(input),
   });
   return { eventId: raw.event_id, entityId: raw.entity_id ?? null };
+}
+
+type RawCrmVisitAnalytics = {
+  from: string;
+  to: string;
+  staff: Array<{
+    staff_id: string;
+    name: string;
+    visits: number;
+    done: number;
+    no_shows: number;
+    cancelled: number;
+    revenue_minor: number;
+    booked_min: number;
+    worked_min: number;
+  }>;
+  services: Array<{
+    product_id: string;
+    name: string;
+    visits: number;
+    revenue_minor: number;
+    minutes: number;
+  }>;
+  clients: { clients: number; new_clients: number; walk_ins: number };
+};
+
+export async function getCrmVisitAnalytics(period: {
+  from: string | null;
+  to: string | null;
+}): Promise<CrmVisitAnalytics> {
+  const raw = await invokeTauri<RawCrmVisitAnalytics>(
+    "crm_get_visit_analytics",
+    { from: period.from, to: period.to },
+  );
+  return {
+    from: raw.from,
+    to: raw.to,
+    staff: raw.staff.map((s) => ({
+      staffId: s.staff_id,
+      name: s.name,
+      visits: s.visits,
+      done: s.done,
+      noShows: s.no_shows,
+      cancelled: s.cancelled,
+      revenueMinor: s.revenue_minor,
+      bookedMin: s.booked_min,
+      workedMin: s.worked_min,
+    })),
+    services: raw.services.map((s) => ({
+      productId: s.product_id,
+      name: s.name,
+      visits: s.visits,
+      revenueMinor: s.revenue_minor,
+      minutes: s.minutes,
+    })),
+    clients: {
+      clients: raw.clients.clients,
+      newClients: raw.clients.new_clients,
+      walkIns: raw.clients.walk_ins,
+    },
+  };
 }

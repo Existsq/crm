@@ -86,6 +86,27 @@ pub async fn crm_get_slots(
     get_relay_json::<Value>(&state, &path).await
 }
 
+/// `GET /crm/analytics/services` as returned by the relay.
+#[tauri::command]
+pub async fn crm_get_visit_analytics(
+    from: Option<String>,
+    to: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let mut params = Vec::new();
+    if let Some(from) = from.as_deref() {
+        params.push(format!("from={}", date(from)?));
+    }
+    if let Some(to) = to.as_deref() {
+        params.push(format!("to={}", date(to)?));
+    }
+    get_relay_json::<Value>(
+        &state,
+        &format!("/crm/analytics/services?{}", params.join("&")),
+    )
+    .await
+}
+
 /// Create or update an appointment.
 #[tauri::command]
 pub async fn crm_write_appointment(

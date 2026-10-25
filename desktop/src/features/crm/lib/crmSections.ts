@@ -14,6 +14,7 @@ export const CRM_SECTIONS = [
   { id: "cash", label: ru.sections.cash },
   { id: "sales", label: ru.sections.sales },
   { id: "analytics", label: ru.sections.analytics },
+  { id: "staff-analytics", label: ru.sections.staffAnalytics },
   { id: "settings", label: ru.sections.settings },
 ] as const;
 

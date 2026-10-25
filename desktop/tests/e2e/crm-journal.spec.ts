@@ -308,3 +308,59 @@ test("a visit is paid at the cash desk and shows in the client's history", async
   await expect(visits).toContainText("Мужская стрижка");
   await expect(visits).toContainText("Визит завершён");
 });
+
+test("staff analytics sum visits, load and services", async ({ page }) => {
+  const value = seed("owner");
+  const space = value.space as Space;
+  const day = today();
+  space.appointments = [
+    ...(space.appointments ?? []),
+    {
+      staff_id: OLGA,
+      date: day,
+      start: "10:00",
+      service_ids: [HAIRCUT, BEARD],
+      client_name: "Пётр",
+      status: "done",
+    },
+    {
+      staff_id: OLGA,
+      date: day,
+      start: "16:00",
+      service_ids: [COLOR],
+      client_name: "Олег",
+      status: "no_show",
+    },
+  ];
+  await page.goto("/");
+  await page.waitForFunction(() => Boolean(window.__BUZZ_E2E_SEED_CRM__));
+  await page.evaluate((data) => window.__BUZZ_E2E_SEED_CRM__?.(data), value);
+  await page.getByTestId("open-crm-view").click();
+  await page.getByTestId("crm-section-staff-analytics").click();
+  await expect(page).toHaveURL(/#\/crm\/staff-analytics$/);
+
+  await expect(page.getByTestId("crm-staff-analytics-visits")).toHaveText("2");
+  await expect(page.getByTestId("crm-staff-analytics-revenue")).toHaveText(
+    /2\s?400,00\s?₽/,
+  );
+  // 45 + 30 + 45 booked minutes of 540 worked: 22%.
+  await expect(page.getByTestId("crm-staff-analytics-utilisation")).toHaveText(
+    "22%",
+  );
+  await expect(page.getByTestId("crm-staff-analytics-new-clients")).toHaveText(
+    "1",
+  );
+  const olga = page.getByTestId(`crm-staff-analytics-${OLGA}`);
+  await expect(olga).toContainText("Ольга");
+  await expect(olga).toContainText("22%");
+  await expect(page.getByTestId(`crm-staff-analytics-${IVAN}`)).toContainText(
+    "нет графика",
+  );
+  await expect(page.getByTestId("crm-staff-analytics-services")).toContainText(
+    "Мужская стрижка",
+  );
+  await waitForAnimations(page);
+  await page
+    .getByTestId("crm-staff-analytics")
+    .screenshot({ path: `${OUT}/04-staff-analytics.png` });
+});
