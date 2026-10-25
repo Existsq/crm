@@ -1,6 +1,7 @@
 import { useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
+  BellRing,
   CalendarClock,
   CalendarDays,
   Contact,
@@ -28,6 +29,7 @@ import {
 const SECTION_ICONS: Record<CrmSectionId, LucideIcon> = {
   products: Package,
   journal: CalendarClock,
+  reminders: BellRing,
   services: Scissors,
   staff: Contact,
   schedule: CalendarDays,

@@ -342,6 +342,7 @@ export function CrmPartiesSection({ space }: { space: CrmMemberSpace }) {
 
       <CrmPartyDialog
         canEdit={canEdit}
+        channelId={space.channelId}
         error={write.error}
         key={dialog.session}
         onCloseAutoFocus={(event) => {

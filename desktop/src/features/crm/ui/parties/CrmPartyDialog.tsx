@@ -20,6 +20,7 @@ import {
   formatCrmDateTime,
 } from "@/features/crm/ui/CrmField";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
+import { CrmPartyTelegram } from "@/features/crm/ui/parties/CrmPartyTelegram";
 import type { CrmParty, CrmPartyFields } from "@/shared/api/tauriCrmSales";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -116,6 +117,7 @@ function PartyPurchases({ party }: { party: CrmParty }) {
  */
 export function CrmPartyDialog({
   canEdit,
+  channelId,
   error,
   onCloseAutoFocus,
   onDismissError,
@@ -126,6 +128,8 @@ export function CrmPartyDialog({
   pending,
 }: {
   canEdit: boolean;
+  /** CRM space channel, for the customer's Telegram reminders. */
+  channelId: string;
   error: unknown;
   onCloseAutoFocus: (event: Event) => void;
   onDismissError: () => void;
@@ -213,6 +217,13 @@ export function CrmPartyDialog({
           </DialogHeader>
           <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-1">
             {party ? <PartyPurchases party={party} /> : null}
+            {party && party.partyType !== "supplier" ? (
+              <CrmPartyTelegram
+                canEdit={canEdit}
+                channelId={channelId}
+                partyId={party.id}
+              />
+            ) : null}
             <fieldset className="grid gap-4 sm:grid-cols-2" disabled={!canEdit}>
               <CrmField id={fieldId("type")} label={fields.type}>
                 <NativeSelect

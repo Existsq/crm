@@ -9,6 +9,7 @@ import {
 import { CrmAnalyticsSection } from "@/features/crm/ui/analytics/CrmAnalyticsSection";
 import { CrmCashSection } from "@/features/crm/ui/cash/CrmCashSection";
 import { CrmJournalSection } from "@/features/crm/ui/journal/CrmJournalSection";
+import { CrmRemindersSection } from "@/features/crm/ui/reminders/CrmRemindersSection";
 import { CrmSettingsSection } from "@/features/crm/ui/CrmSettingsSection";
 import { CrmPartiesSection } from "@/features/crm/ui/parties/CrmPartiesSection";
 import { CrmProductsSection } from "@/features/crm/ui/products/CrmProductsSection";
@@ -36,6 +37,8 @@ function CrmSectionContent({
       return <CrmProductsSection space={space} />;
     case "journal":
       return <CrmJournalSection space={space} />;
+    case "reminders":
+      return <CrmRemindersSection space={space} />;
     case "services":
       return <CrmProductsSection kind="services" space={space} />;
     case "staff":
