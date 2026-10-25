@@ -85,7 +85,10 @@ impl StaffPayload {
                 if valid {
                     Ok(hex.to_ascii_lowercase())
                 } else {
-                    Err(CrmError::field("member", "must be a 64-character hex pubkey"))
+                    Err(CrmError::field(
+                        "member",
+                        "must be a 64-character hex pubkey",
+                    ))
                 }
             })
             .transpose()?;
@@ -328,8 +331,14 @@ mod tests {
         assert_eq!(
             payload.days[0].intervals,
             vec![
-                WorkInterval { start: 600, end: 840 },
-                WorkInterval { start: 900, end: 1440 }
+                WorkInterval {
+                    start: 600,
+                    end: 840
+                },
+                WorkInterval {
+                    start: 900,
+                    end: 1440
+                }
             ]
         );
         assert!(payload.days[1].intervals.is_empty());
@@ -339,9 +348,7 @@ mod tests {
 
     #[test]
     fn invalid_schedules_are_rejected() {
-        let day = |date: &str, start: &str, end: &str| {
-            json!([{"date": date, "intervals": [{"start": start, "end": end}]}])
-        };
+        let day = |date: &str, start: &str, end: &str| json!([{"date": date, "intervals": [{"start": start, "end": end}]}]);
         for days in [
             json!([]),
             day("2026-02-29", "10:00", "18:00"),

@@ -496,6 +496,11 @@ function analytics(
   };
 }
 
+/** A mock party, for the journal and stock mocks' lookups. */
+export function mockCrmPartyById(partyId: string): MockParty | undefined {
+  return parties.find((party) => party.id === partyId);
+}
+
 /** A mock sale as the cash-desk mock reads it. */
 export function mockCrmSaleById(saleId: string): MockSale | undefined {
   return sales.find((sale) => sale.id === saleId);
@@ -563,9 +568,4 @@ export function handleCrmSalesMockCommand(
     default:
       return undefined;
   }
-}
-
-/** The mock party `partyId`, for the stock mock's supplier checks. */
-export function mockCrmPartyById(partyId: string) {
-  return parties.find((party) => party.id === partyId);
 }

@@ -32,7 +32,10 @@ impl PreparedStaff {
             .as_deref()
             .map(|hex| {
                 hex::decode(hex).map_err(|_| {
-                    invalid(CrmError::field("member", "must be a 64-character hex pubkey"))
+                    invalid(CrmError::field(
+                        "member",
+                        "must be a 64-character hex pubkey",
+                    ))
                 })
             })
             .transpose()?;

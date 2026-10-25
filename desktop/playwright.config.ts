@@ -98,6 +98,7 @@ export default defineConfig({
         "**/crm-analytics-screenshots.spec.ts",
         "**/crm-staff.spec.ts",
         "**/crm-stock.spec.ts",
+        "**/crm-journal.spec.ts",
         "**/workflow-reaction-picker.spec.ts",
         "**/workflow-local-controls.spec.ts",
         "**/workflow-title-stability.spec.ts",

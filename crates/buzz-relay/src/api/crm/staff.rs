@@ -115,8 +115,7 @@ pub async fn schedule(
     RawQuery(raw_query): RawQuery,
 ) -> Response {
     let member =
-        match authorize_space_member(&state, &headers, SCHEDULE_PATH, raw_query.as_deref()).await
-        {
+        match authorize_space_member(&state, &headers, SCHEDULE_PATH, raw_query.as_deref()).await {
             Ok(member) => member,
             Err(response) => return response,
         };

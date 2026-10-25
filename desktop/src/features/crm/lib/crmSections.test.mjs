@@ -24,6 +24,7 @@ test("the default section is the first one: the catalog", () => {
     [
       "products",
       "stock",
+      "journal",
       "services",
       "staff",
       "schedule",

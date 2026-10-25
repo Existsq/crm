@@ -155,6 +155,32 @@ keep their hours. It has no `crm-id`.
   4 per day, sorted and non-overlapping.
 - Archived or unknown staff are `invalid:`.
 
+### `42133` — Appointment
+
+A client booked with one staff member. Authorized like posting documents.
+
+```json
+{
+  "kind": 42133,
+  "tags": [["h", "<space channel>"], ["crm-id", "<appointment uuid>"]],
+  "content": "{\"v\":1,\"staff_id\":\"<staff uuid>\",\"date\":\"2026-11-02\",\"start\":\"10:00\",\"services\":[{\"product_id\":\"<product uuid>\",\"duration_min\":60,\"price_minor\":150000}],\"client_name\":\"Анна\",\"client_phone\":\"+7 900 000-00-01\",\"status\":\"booked\"}"
+}
+```
+
+- Create and CAS update follow the warehouse rules (`crm-id`,
+  `expected-revision`).
+- `start` is `HH:MM` on a 5-minute grid; the visit (the sum of the service
+  durations) must end by midnight. 1–20 distinct services, each one the staff
+  member performs; the relay stores the service names as a snapshot.
+- The client is either `customer_id` (a live customer card) or `client_name`
+  with an optional `client_phone`.
+- `status` is `booked`, `confirmed`, `arrived`, `done`, `no_show` or
+  `cancelled`. Every status but `no_show` and `cancelled` holds the time.
+- A time-holding visit must fit the staff member's working intervals for the
+  day unless `outside_hours` is `true`, and never overlaps another
+  time-holding visit of the same staff member (`conflict: …`). `source` is
+  `staff` (default) or `online`.
+- A paid visit cannot be moved to another staff member, day or time.
 ### `42106` — Stock document
 
 Receipt (`receipt`), write-off (`write_off`), inventory (`inventory`) or
@@ -241,6 +267,18 @@ archived staff); `GET /crm/staff/{id}` returns one. `GET
 with interval bounds in minutes after midnight. `GET /crm/products` takes
 `kind=services` or `kind=goods`.
 
+`GET /crm/appointments?from&to[&staff_id]` (at most 93 days), or
+`?customer_id=<uuid>` alone for a client's history, returns
+`{"appointments": [{"id", "staff_id", "date", "start", "end", "services",
+"total_minor", "customer_id", "customer_name", "customer_phone",
+"client_name", "client_phone", "status", "note", "source", "outside_hours",
+"sale_id", "revision", …}]}` with `start`/`end` in minutes after midnight;
+`GET /crm/appointments/{id}` returns one. `GET
+/crm/slots?date&service_ids=<uuid>,<uuid>[&staff_id][&step=15]` returns
+`{"date", "duration_min", "total_minor", "step", "staff": [{"staff_id", "name",
+"starts": ["HH:MM"]}]}`: the free start times of every active staff member who
+performs all the services. Past days have no slots; today's start after the
+current time in the space timezone.
 `GET /crm/stock?warehouse=<uuid>&q=&low=true` returns `{"warehouse_id",
 "truncated", "items": [{"product_id", "name", "sku", "unit", "category",
 "price_minor", "min_stock_milli", "qty_milli", "value_minor", "archived"}],

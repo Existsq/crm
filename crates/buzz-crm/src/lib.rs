@@ -8,6 +8,7 @@
 //!
 //! - [`money`] — integer kopecks and thousandth quantities (AD-004).
 //! - [`vat`] — VAT rates as a product attribute.
+//! - [`appointment`] — appointments with staff (kind 42133).
 //! - [`authz`] — the role × action table (ADR-0002).
 //! - [`space`] — CRM space and warehouse payloads (kinds 42100, 42101).
 //! - [`catalog`] — product payload, units, fiscal item types (kind 42102).
@@ -20,6 +21,7 @@
 //! - [`tags`] — tag conventions shared by every CRM event.
 //! - [`validate`] — names, INN, timezone.
 
+pub mod appointment;
 pub mod authz;
 pub mod catalog;
 pub mod error;
@@ -34,6 +36,9 @@ pub mod tags;
 pub mod validate;
 pub mod vat;
 
+pub use appointment::{
+    AppointmentPayload, AppointmentService, AppointmentSource, AppointmentStatus,
+};
 pub use authz::{capabilities, decide, CrmAction, CrmRole};
 pub use catalog::{PaymentObject, ProductPayload, Unit};
 pub use error::{CrmError, Result};
@@ -46,7 +51,9 @@ pub use sale::{PaymentMethod, SaleLine, SalePayload, SalePayment, SaleVoidPayloa
 pub use space::{
     Currency, FiscalizationMode, SpacePayload, SpaceSettings, WarehousePayload, WarehouseSeed,
 };
-pub use staff::{ScheduleDay, SchedulePayload, StaffPayload, WorkInterval};
+pub use staff::{
+    format_clock, parse_clock, ScheduleDay, SchedulePayload, StaffPayload, WorkInterval,
+};
 pub use stock::{
     StockDelta, StockDocLine, StockDocPayload, StockDocType, StockLevel, TechCardItem,
     TechCardPayload,

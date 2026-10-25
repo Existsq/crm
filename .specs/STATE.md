@@ -46,8 +46,10 @@
 
 - **Goal**: replicate YCLIENTS (salon/barbershop booking) on top of the retail CRM; 8-phase plan: 1 services + staff + schedules, 2 appointment journal, 3 visit payment via the cash desk, 4 public online booking, 5 reminders, 6 payroll + service analytics, 7 stock ledger + tech cards, 8 loyalty
 - **Completed (phase 1)**: `duration_min` on bookable products (service/job, 5–720 step 5) and `kind=services|goods` on `GET /crm/products`; kinds 42131 (staff, CAS) and 42132 (working days of one staff member, days not listed keep their hours); migration 0055 + `schema.sql`; `GET /crm/staff`, `/crm/schedule`; SDK builders; NIP-CRM section; desktop sidebar sections Услуги / Сотрудники / График работы (week grid, day editor, weekday and shift templates); Postgres tests, relay e2e `e2e_crm_staff.rs`, unit tests, Playwright `crm-staff.spec.ts`
+- **Completed (phase 2)**: kind 42133 appointments (CAS; staff row locked FOR UPDATE; working hours unless `outside_hours`; no overlap with visits holding time; `no_show`/`cancelled` free it), migration 0056, `GET /crm/appointments` (range or `customer_id`) and `GET /crm/slots`; desktop section «Журнал записи» (day grid per staff member, book from a free cell, slots in the time picker, status change, cancel); Postgres tests, relay e2e `e2e_crm_appointments.rs`, Playwright `crm-journal.spec.ts`
+- **Parallel thread**: stock ledger on `claude/project-thread-fm5rig` (migration 0060, kinds 42106–42108; sales deduct goods); merge before phase 3 touches the sale handler
 - **Earlier on this branch**: customers, sales, analytics, cash desk (ATOL DTO10)
-- **Not done**: appointments (42133) with server-side overlap checks and relay slot calculation; staff are not linked to channel members in the UI (`member` is stored only); no draft PR opened (the user decides)
-- **Next step**: phase 2, the appointment journal
+- **Not done**: slots count the edited visit as busy (dialog keeps its own time as an option); staff are not linked to channel members in the UI (`member` is stored only); no draft PR opened (the user decides)
+- **Next step**: phase 3, paying a visit at the cash desk (`appointment_id` on the sale, relay sets `sale_id` and `done`) and the client's visit history
 - **Blockers**: none
 - **Branch**: claude/project-thread-yqqm67

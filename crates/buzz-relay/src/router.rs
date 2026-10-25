@@ -340,6 +340,18 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             api::crm::staff::SCHEDULE_PATH,
             get(api::crm::staff::schedule),
         )
+        .route(
+            api::crm::appointments::APPOINTMENTS_PATH,
+            get(api::crm::appointments::list),
+        )
+        .route(
+            api::crm::appointments::APPOINTMENT_PATH,
+            get(api::crm::appointments::get),
+        )
+        .route(
+            api::crm::appointments::SLOTS_PATH,
+            get(api::crm::appointments::slots),
+        )
         .route(api::crm::stock::STOCK_PATH, get(api::crm::stock::levels))
         .route(api::crm::stock::MOVES_PATH, get(api::crm::stock::moves))
         .route(api::crm::stock::DOCS_PATH, get(api::crm::stock::docs))
