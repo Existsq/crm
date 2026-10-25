@@ -10,6 +10,8 @@
 mod catalog;
 mod decide;
 pub(crate) mod guards;
+mod parties;
+mod sales;
 mod space;
 
 use std::sync::Arc;
@@ -19,7 +21,10 @@ use sqlx::{Postgres, Transaction};
 use tracing::info;
 use uuid::Uuid;
 
-use buzz_core::kind::{event_kind_u32, KIND_CRM_PRODUCT, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE};
+use buzz_core::kind::{
+    event_kind_u32, KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID,
+    KIND_CRM_SPACE, KIND_CRM_WAREHOUSE,
+};
 use buzz_core::tenant::TenantContext;
 
 use super::event::dispatch_persistent_event;
@@ -48,6 +53,9 @@ pub(crate) async fn ingest_crm_event(
         KIND_CRM_SPACE => Prepared::Space(space::Prepared::space(event)?),
         KIND_CRM_WAREHOUSE => Prepared::Space(space::Prepared::warehouse(event)?),
         KIND_CRM_PRODUCT => Prepared::Product(catalog::PreparedProduct::parse(event)?),
+        KIND_CRM_PARTY => Prepared::Party(parties::PreparedParty::parse(event)?),
+        KIND_CRM_SALE => Prepared::Sale(sales::PreparedSale::parse(event)?),
+        KIND_CRM_SALE_VOID => Prepared::SaleVoid(sales::PreparedSaleVoid::parse(event)?),
         other => {
             return Err(IngestError::Rejected(format!(
                 "invalid: CRM kind {other} is not supported by this relay"
@@ -115,6 +123,9 @@ pub(crate) async fn ingest_crm_event(
 enum Prepared {
     Space(space::Prepared),
     Product(catalog::PreparedProduct),
+    Party(parties::PreparedParty),
+    Sale(sales::PreparedSale),
+    SaleVoid(sales::PreparedSaleVoid),
 }
 
 impl Prepared {
@@ -128,6 +139,9 @@ impl Prepared {
         match self {
             Prepared::Space(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
             Prepared::Product(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::Party(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::Sale(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::SaleVoid(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
         }
     }
 }

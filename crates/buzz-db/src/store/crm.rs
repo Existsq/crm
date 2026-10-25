@@ -1,5 +1,7 @@
 //! CRM projections: spaces and warehouses (migration 0050); the product
-//! catalog lives in [`catalog`] (migration 0051).
+//! catalog lives in [`catalog`] (migration 0051), customers and suppliers in
+//! [`parties`] (0052), sale documents in [`sales`] (0053) and the read-only
+//! [`analytics`] over them.
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
 //! event and its projection rows commit or roll back together (ADR-0001).
@@ -15,11 +17,21 @@ use uuid::Uuid;
 
 use crate::{error::Result, CommunityId, Db};
 
+pub mod analytics;
 pub mod catalog;
+pub mod parties;
+pub mod sales;
 
+pub use analytics::{AnalyticsPeriod, SalesAnalytics};
 pub use catalog::{
     CrmProductRecord, ProductPage, ProductQuery, ProductWrite, ProductWriteOutcome,
     MAX_PRODUCT_PAGE,
+};
+pub use parties::{
+    CrmPartyRecord, PartyPage, PartyQuery, PartyRole, PartyWrite, PartyWriteOutcome, MAX_PARTY_PAGE,
+};
+pub use sales::{
+    CrmSaleRecord, SaleInsert, SaleLineInsert, SalePage, SaleQuery, SaleVoidOutcome, MAX_SALE_PAGE,
 };
 
 /// Channel facts needed to decide whether a channel can host a CRM space.

@@ -318,7 +318,7 @@ macro_rules! product_columns {
 }
 
 /// Escape `%`, `_` and `\` for a `LIKE` pattern.
-fn like_escape(raw: &str) -> String {
+pub(super) fn like_escape(raw: &str) -> String {
     let mut escaped = String::with_capacity(raw.len());
     for c in raw.chars() {
         if matches!(c, '%' | '_' | '\\') {

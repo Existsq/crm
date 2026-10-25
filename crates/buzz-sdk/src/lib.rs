@@ -20,7 +20,8 @@ pub mod nip_oa;
 
 pub use builders::*;
 pub use crm::{
-    build_crm_product, build_crm_space_create, build_crm_space_update, build_crm_warehouse,
+    build_crm_party, build_crm_product, build_crm_sale, build_crm_sale_void,
+    build_crm_space_create, build_crm_space_update, build_crm_warehouse,
 };
 
 /// Re-export kind constants so consumers don't need buzz-core directly.

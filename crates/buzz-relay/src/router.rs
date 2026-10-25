@@ -324,6 +324,17 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             get(api::crm::products::get),
         )
         .route(
+            api::crm::parties::PARTIES_PATH,
+            get(api::crm::parties::list),
+        )
+        .route(api::crm::parties::PARTY_PATH, get(api::crm::parties::get))
+        .route(api::crm::sales::SALES_PATH, get(api::crm::sales::list))
+        .route(api::crm::sales::SALE_PATH, get(api::crm::sales::get))
+        .route(
+            api::crm::sales::ANALYTICS_PATH,
+            get(api::crm::sales::analytics),
+        )
+        .route(
             "/operator/communities",
             get(api::operator::list_owned_communities).post(api::operator::provision_community),
         )

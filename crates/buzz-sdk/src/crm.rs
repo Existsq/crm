@@ -4,10 +4,13 @@
 //! the relay runs, so a builder never produces an event the relay would reject
 //! for shape reasons. Authorization and CAS checks still happen at the relay.
 
-use buzz_core::kind::{KIND_CRM_PRODUCT, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE};
+use buzz_core::kind::{
+    KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE,
+    KIND_CRM_WAREHOUSE,
+};
 use buzz_crm::{
-    space::PAYLOAD_VERSION, tags, ProductPayload, SpacePayload, SpaceSettings, WarehousePayload,
-    WarehouseSeed,
+    space::PAYLOAD_VERSION, tags, PartyPayload, ProductPayload, SalePayload, SaleVoidPayload,
+    SpacePayload, SpaceSettings, WarehousePayload, WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -129,6 +132,74 @@ pub fn build_crm_product(
     Ok(EventBuilder::new(Kind::Custom(KIND_CRM_PRODUCT as u16), content).tags(event_tags))
 }
 
+/// Build a kind 42103 customer/supplier event: a create when
+/// `expected_revision` is `None`, otherwise an update of the party's current
+/// revision. The content is validated and normalized with the relay's rules.
+pub fn build_crm_party(
+    channel_id: Uuid,
+    party_id: Uuid,
+    mut payload: PartyPayload,
+    expected_revision: Option<&str>,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = PartyPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let mut event_tags = vec![
+        tag(&["h", &channel_id.to_string()])?,
+        tag(&[tags::TAG_CRM_ID, &party_id.to_string()])?,
+    ];
+    if let Some(revision) = expected_revision {
+        event_tags.push(revision_tag(revision)?);
+    }
+    Ok(EventBuilder::new(Kind::Custom(KIND_CRM_PARTY as u16), content).tags(event_tags))
+}
+
+/// Build the kind 42104 event that posts sale `sale_id`.
+///
+/// Sales are posted once; pick `sale_id` once per sale so a retried submit
+/// is rejected as a duplicate instead of selling twice.
+pub fn build_crm_sale(
+    channel_id: Uuid,
+    sale_id: Uuid,
+    mut payload: SalePayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = SalePayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_SALE as u16), content).tags([
+            tag(&["h", &channel_id.to_string()])?,
+            tag(&[tags::TAG_CRM_ID, &sale_id.to_string()])?,
+        ]),
+    )
+}
+
+/// Build the kind 42105 event that voids (сторно) sale `sale_id`.
+pub fn build_crm_sale_void(
+    channel_id: Uuid,
+    sale_id: Uuid,
+    reason: &str,
+) -> Result<EventBuilder, SdkError> {
+    let payload = SaleVoidPayload {
+        v: PAYLOAD_VERSION,
+        reason: reason.to_owned(),
+    };
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = SaleVoidPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_SALE_VOID as u16), content).tags([
+            tag(&["h", &channel_id.to_string()])?,
+            tag(&[tags::TAG_CRM_ID, &sale_id.to_string()])?,
+        ]),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +313,74 @@ mod tests {
         assert_eq!(tag_values(&event, "crm-id"), vec![id.to_string()]);
         assert!(tag_values(&event, "expected-revision").is_empty());
         assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_WAREHOUSE);
+    }
+    #[test]
+    fn party_builder_normalizes_and_tags() {
+        let channel = Uuid::new_v4();
+        let id = Uuid::new_v4();
+        let party = |name: &str| PartyPayload {
+            v: 0,
+            party_type: buzz_crm::PartyType::Customer,
+            name: name.into(),
+            phone: Some(" +7 912 000-11-22 ".into()),
+            email: None,
+            inn: None,
+            address: None,
+            note: None,
+            archived: false,
+        };
+        assert!(build_crm_party(channel, id, party(" "), None).is_err());
+        let event = build_crm_party(channel, id, party(" Мария "), None)
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_PARTY);
+        assert_eq!(tag_values(&event, "crm-id"), vec![id.to_string()]);
+        assert!(tag_values(&event, "expected-revision").is_empty());
+        let parsed = PartyPayload::parse(&event.content).unwrap();
+        assert_eq!(parsed.name, "Мария");
+        assert_eq!(parsed.phone.as_deref(), Some("+7 912 000-11-22"));
+    }
+
+    #[test]
+    fn sale_and_void_builders_validate_and_tag() {
+        let channel = Uuid::new_v4();
+        let sale_id = Uuid::new_v4();
+        let sale = |qty: i64| SalePayload {
+            v: 0,
+            warehouse_id: Uuid::new_v4(),
+            customer_id: None,
+            payment: buzz_crm::PaymentMethod::Cash,
+            lines: vec![buzz_crm::SaleLine {
+                product_id: Uuid::new_v4(),
+                qty_milli: buzz_crm::Qty::from_milli(qty).unwrap(),
+                price_minor: buzz_crm::Money::from_minor(100).unwrap(),
+                discount_minor: buzz_crm::Money::ZERO,
+            }],
+            note: None,
+        };
+        assert!(build_crm_sale(channel, sale_id, sale(0)).is_err());
+        let event = build_crm_sale(channel, sale_id, sale(2000))
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_SALE);
+        assert_eq!(tag_values(&event, "crm-id"), vec![sale_id.to_string()]);
+        assert_eq!(
+            SalePayload::parse(&event.content)
+                .unwrap()
+                .total()
+                .unwrap()
+                .minor(),
+            200
+        );
+
+        assert!(build_crm_sale_void(channel, sale_id, "  ").is_err());
+        let void = build_crm_sale_void(channel, sale_id, "ошибка")
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(void.kind.as_u16()), KIND_CRM_SALE_VOID);
+        assert_eq!(tag_values(&void, "crm-id"), vec![sale_id.to_string()]);
     }
 }

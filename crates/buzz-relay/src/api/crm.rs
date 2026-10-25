@@ -24,7 +24,9 @@ use crate::{
     state::AppState,
 };
 
+pub mod parties;
 pub mod products;
+pub mod sales;
 
 /// Route path of the space read.
 pub const SPACE_PATH: &str = "/crm/space";
