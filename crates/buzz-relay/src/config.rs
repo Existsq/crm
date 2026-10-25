@@ -188,6 +188,8 @@ pub struct Config {
     /// Optional hex-encoded private key for the relay's signing keypair.
     /// If absent, a fresh keypair is generated at startup.
     pub relay_private_key: Option<String>,
+    /// Public online booking: SMS delivery of phone codes and rate-limit keys.
+    pub booking: crate::api::public_booking::BookingConfig,
     /// Optional Unix Domain Socket path. When set, the relay also listens on this
     /// UDS for traffic (e.g. service mesh sidecar). Health probes still use TCP.
     pub uds_path: Option<String>,
@@ -1216,7 +1218,16 @@ impl Config {
             ));
         }
 
+        let booking = crate::api::public_booking::BookingConfig::from_env()?;
+        if booking.expose_codes {
+            tracing::warn!(
+                "BUZZ_BOOKING_EXPOSE_CODES=true — booking phone codes are returned to clients; \
+                 never enable this in production"
+            );
+        }
+
         Ok(Self {
+            booking,
             bind_addr,
             database_url,
             read_database_url,

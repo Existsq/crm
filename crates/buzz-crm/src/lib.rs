@@ -10,6 +10,7 @@
 //! - [`vat`] — VAT rates as a product attribute.
 //! - [`appointment`] — appointments with staff (kind 42133).
 //! - [`authz`] — the role × action table (ADR-0002).
+//! - [`booking`] — the public online booking page (kinds 42134, 42135).
 //! - [`space`] — CRM space and warehouse payloads (kinds 42100, 42101).
 //! - [`catalog`] — product payload, units, fiscal item types (kind 42102).
 //! - [`fiscal`] — fiscal receipts and cash-register shifts (kinds 42120, 42121).
@@ -21,6 +22,7 @@
 
 pub mod appointment;
 pub mod authz;
+pub mod booking;
 pub mod catalog;
 pub mod error;
 pub mod fiscal;
@@ -37,6 +39,7 @@ pub use appointment::{
     AppointmentPayload, AppointmentService, AppointmentSource, AppointmentStatus,
 };
 pub use authz::{capabilities, decide, CrmAction, CrmRole};
+pub use booking::{OnlineBookingRequest, OnlineBookingSettings};
 pub use catalog::{PaymentObject, ProductPayload, Unit};
 pub use error::{CrmError, Result};
 pub use fiscal::{

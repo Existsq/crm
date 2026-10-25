@@ -122,6 +122,10 @@ const NIP_FI_EXEMPT_PREFIXES: &[&str] = &[
     "/api/join-policy",
     // Webhook trigger — secret-header auth; subtree for /hooks/{id}
     "/hooks/",
+    // Public online booking page — no account; exact path
+    "/book",
+    // Public online booking API — rate-limited, phone-code verified; subtree
+    "/public/booking",
     // Huddle audio WebSocket — WS-NIP-FI governs WebSocket; subtree
     "/huddle/",
     // Testbed-only mesh probe — no auth; subtree
@@ -355,6 +359,31 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             api::crm::sales::ANALYTICS_PATH,
             get(api::crm::sales::analytics),
+        )
+        .route(
+            api::crm::booking::ONLINE_BOOKING_PATH,
+            get(api::crm::booking::get),
+        )
+        // Public online booking (no auth; per-address limits, phone codes).
+        .route(
+            api::public_booking::PAGE_PATH,
+            get(api::public_booking::page),
+        )
+        .route(
+            api::public_booking::INFO_PATH,
+            get(api::public_booking::info),
+        )
+        .route(
+            api::public_booking::SLOTS_PATH,
+            get(api::public_booking::slots),
+        )
+        .route(
+            api::public_booking::CODE_PATH,
+            post(api::public_booking::send_code),
+        )
+        .route(
+            api::public_booking::BOOK_PATH,
+            post(api::public_booking::book),
         )
         .route(
             "/operator/communities",
@@ -1744,6 +1773,11 @@ mod tests {
         // Webhook (prefix)
         assert!(is_exempt("/hooks/abc123"));
         assert!(!is_exempt("/hooksnot"), "/hooksnot must not match /hooks/");
+        assert!(is_exempt("/book"));
+        assert!(is_exempt("/public/booking"));
+        assert!(is_exempt("/public/booking/appointments"));
+        assert!(!is_exempt("/booking"), "/book is an exact entry");
+        assert!(!is_exempt("/public/bookings"));
 
         // Operator / admin subtrees
         assert!(is_exempt("/operator/communities"));

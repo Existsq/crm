@@ -2299,3 +2299,56 @@ CREATE UNIQUE INDEX crm_appointments_sale_unique
     ON crm_appointments (community_id, sale_id) WHERE sale_id IS NOT NULL;
 
 SELECT attach_community_write_fence('crm_appointments');
+
+-- CRM online booking page (kind 42135): one settings row per space.
+--
+-- `settings` is the normalized kind 42135 payload; `enabled` is copied out so
+-- the public page can be looked up without parsing it. Bookings made on the
+-- page are appointments with source 'online' (kind 42134, signed by the
+-- relay) and live in crm_appointments.
+CREATE TABLE crm_online_booking (
+    community_id       UUID        NOT NULL REFERENCES communities(id),
+    space_channel_id   UUID        NOT NULL,
+    enabled            BOOLEAN     NOT NULL,
+    settings           JSONB       NOT NULL CHECK (jsonb_typeof(settings) = 'object'),
+    revision_event_id  BYTEA       NOT NULL CHECK (length(revision_event_id) = 32),
+    created_by         BYTEA       NOT NULL CHECK (length(created_by) = 32),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (community_id, space_channel_id),
+    FOREIGN KEY (community_id, space_channel_id) REFERENCES crm_spaces (community_id, channel_id)
+);
+
+SELECT attach_community_write_fence('crm_online_booking');
+
+-- Phone verification for the public booking page.
+--
+-- A client asks for a code, gets it by SMS and books with it. Only an HMAC of
+-- the code is kept. A code expires after `expires_at`, allows a few wrong
+-- attempts and books one appointment (`used_at`, `appointment_id`). Rows are
+-- also the per-phone and per-community send counters, so the relay deletes
+-- them a day after they were issued.
+CREATE TABLE crm_booking_codes (
+    community_id       UUID        NOT NULL REFERENCES communities(id),
+    verification_id    UUID        NOT NULL,
+    phone              TEXT        NOT NULL CHECK (char_length(phone) BETWEEN 1 AND 32),
+    -- Digits with the Russian trunk 8 normalized to 7.
+    phone_key          TEXT        NOT NULL CHECK (phone_key ~ '^[0-9]{5,15}$'),
+    code_hash          BYTEA       NOT NULL CHECK (length(code_hash) = 32),
+    attempts           INTEGER     NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at         TIMESTAMPTZ NOT NULL,
+    verified_at        TIMESTAMPTZ,
+    used_at            TIMESTAMPTZ,
+    appointment_id     UUID,
+    PRIMARY KEY (community_id, verification_id),
+    CHECK (expires_at > created_at),
+    CHECK (used_at IS NULL OR (verified_at IS NOT NULL AND appointment_id IS NOT NULL))
+);
+
+CREATE INDEX crm_booking_codes_by_phone
+    ON crm_booking_codes (community_id, phone_key, created_at);
+CREATE INDEX crm_booking_codes_by_time
+    ON crm_booking_codes (community_id, created_at);
+
+SELECT attach_community_write_fence('crm_booking_codes');

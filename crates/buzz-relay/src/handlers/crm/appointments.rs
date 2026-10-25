@@ -53,46 +53,68 @@ impl PreparedAppointment {
             false,
         )
         .await?;
-        let payload = &self.payload;
-        let services: Vec<AppointmentServiceWrite> = payload
-            .services
-            .iter()
-            .map(|service| AppointmentServiceWrite {
-                product_id: service.product_id,
-                // Bounded to 720 by `AppointmentPayload::parse`.
-                duration_min: service.duration_min as i32,
-                price_minor: service.price_minor.minor(),
-            })
-            .collect();
-        let write = store::AppointmentWrite {
-            appointment_id: self.appointment_id,
-            space_channel_id: channel_id,
-            staff_id: payload.staff_id,
-            day: self.day,
-            start_min: i32::from(payload.start),
-            end_min: i32::from(payload.end()),
-            services: &services,
-            customer_id: payload.customer_id,
-            client_name: payload.client_name.as_deref(),
-            client_phone: payload.client_phone.as_deref(),
-            status: payload.status.as_str(),
-            holds_time: payload.status.holds_time(),
-            note: payload.note.as_deref(),
-            source: payload.source.as_str(),
-            outside_hours: payload.outside_hours,
-            revision_event_id: event.id.as_bytes(),
-            actor: &actor,
-        };
-        let outcome = store::appointments::write_appointment(
+        project(
             tx,
-            tenant.community(),
-            write,
+            tenant,
+            event,
+            channel_id,
+            self.appointment_id,
+            self.day,
+            &self.payload,
             self.expected_revision.as_ref().map(|r| r.as_slice()),
         )
         .await
-        .map_err(|e| db_error("write CRM appointment", e))?;
-        appointment_outcome(outcome)
     }
+}
+
+/// Write the appointment row of a validated payload (shared with the
+/// relay-signed online bookings of kind 42134, which skip the role check).
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn project(
+    tx: &mut Transaction<'static, Postgres>,
+    tenant: &TenantContext,
+    event: &Event,
+    channel_id: Uuid,
+    appointment_id: Uuid,
+    day: NaiveDate,
+    payload: &AppointmentPayload,
+    expected_revision: Option<&[u8]>,
+) -> Result<(), IngestError> {
+    let actor = event.pubkey.to_bytes();
+    let services: Vec<AppointmentServiceWrite> = payload
+        .services
+        .iter()
+        .map(|service| AppointmentServiceWrite {
+            product_id: service.product_id,
+            // Bounded to 720 by `AppointmentPayload::parse`.
+            duration_min: service.duration_min as i32,
+            price_minor: service.price_minor.minor(),
+        })
+        .collect();
+    let write = store::AppointmentWrite {
+        appointment_id,
+        space_channel_id: channel_id,
+        staff_id: payload.staff_id,
+        day,
+        start_min: i32::from(payload.start),
+        end_min: i32::from(payload.end()),
+        services: &services,
+        customer_id: payload.customer_id,
+        client_name: payload.client_name.as_deref(),
+        client_phone: payload.client_phone.as_deref(),
+        status: payload.status.as_str(),
+        holds_time: payload.status.holds_time(),
+        note: payload.note.as_deref(),
+        source: payload.source.as_str(),
+        outside_hours: payload.outside_hours,
+        revision_event_id: event.id.as_bytes(),
+        actor: &actor,
+    };
+    let outcome =
+        store::appointments::write_appointment(tx, tenant.community(), write, expected_revision)
+            .await
+            .map_err(|e| db_error("write CRM appointment", e))?;
+    appointment_outcome(outcome)
 }
 
 fn rejected(message: String) -> IngestError {

@@ -201,6 +201,22 @@ pub(super) async fn require_live_space(
     exclusive: bool,
 ) -> Result<(), IngestError> {
     let community = tenant.community();
+    require_space_channel(tx, tenant, channel_id, exclusive).await?;
+    let role = store::channel_role_for_write(tx, community, channel_id, actor)
+        .await
+        .map_err(|e| db_error("read channel role", e))?;
+    decide::authorize(role.as_deref(), action)
+}
+
+/// The channel is the community's live CRM space (no role check: callers
+/// either check one or are the relay itself).
+pub(super) async fn require_space_channel(
+    tx: &mut Transaction<'static, Postgres>,
+    tenant: &TenantContext,
+    channel_id: Uuid,
+    exclusive: bool,
+) -> Result<(), IngestError> {
+    let community = tenant.community();
     store::space_for_write(tx, community, channel_id, exclusive)
         .await
         .map_err(|e| db_error("read CRM space", e))?
@@ -210,11 +226,7 @@ pub(super) async fn require_live_space(
     let facts = store::channel_facts_for_write(tx, community, channel_id)
         .await
         .map_err(|e| db_error("read channel", e))?;
-    decide::channel_can_host_space(facts.as_ref())?;
-    let role = store::channel_role_for_write(tx, community, channel_id, actor)
-        .await
-        .map_err(|e| db_error("read channel role", e))?;
-    decide::authorize(role.as_deref(), action)
+    decide::channel_can_host_space(facts.as_ref())
 }
 
 async fn check_timezone(

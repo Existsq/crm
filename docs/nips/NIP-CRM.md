@@ -182,6 +182,42 @@ A client booked with one staff member. Authorized like posting documents.
   `staff` (default) or `online`.
 - A paid visit cannot be moved to another staff member, day or time.
 
+### `42135` — Online booking settings
+
+The space's public booking page. Authorized like space settings (owner or
+admin); one per space, created without and updated with `expected-revision`.
+
+```json
+{
+  "kind": 42135,
+  "tags": [["h", "<space channel>"]],
+  "content": "{\"v\":1,\"enabled\":true,\"title\":\"Барбершоп «Борода»\",\"address\":\"ул. Ленина, 1\",\"horizon_days\":30,\"min_notice_min\":60,\"step_min\":15,\"staff_ids\":[],\"service_ids\":[]}"
+}
+```
+
+- `horizon_days` 1–180, `min_notice_min` 0–10080, `step_min` 5–60 in steps
+  of 5. Empty `staff_ids` / `service_ids` offer every live staff member /
+  bookable service. `GET /crm/online-booking` returns the settings, their
+  `revision` and `public_path` (`/book`).
+
+### `42134` — Online booking
+
+A client's booking from the public page. Only the relay signs it; a client
+publishing this kind gets `restricted:`. The content is a kind 42133 payload
+with `source: "online"` and `status: "booked"`, priced from the catalog; the
+relay writes it through the same appointment checks (services, hours,
+overlap) and, in the same transaction, spends the client's phone code, so
+one code books one visit. When the verified phone matches exactly one live
+customer card, `customer_id` links it.
+
+The page (`GET /book`) and its API need no account: `GET /public/booking`,
+`GET /public/booking/slots`, `POST /public/booking/code` (texts a six-digit
+code; one per phone per minute, five per phone per day, 100 per community
+per hour) and `POST /public/booking/appointments` (five attempts per code,
+ten minutes). Every route is limited per client address and answers 404
+unless the page is enabled. SMS delivery: `BUZZ_BOOKING_SMS=log|smsru`,
+`BUZZ_SMS_RU_API_ID`.
+
 ## Relay responses
 
 | Situation | `OK` message | HTTP bridge |

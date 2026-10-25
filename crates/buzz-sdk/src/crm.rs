@@ -5,14 +5,15 @@
 //! for shape reasons. Authorization and CAS checks still happen at the relay.
 
 use buzz_core::kind::{
-    KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY,
-    KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF,
-    KIND_CRM_STAFF_SCHEDULE, KIND_CRM_WAREHOUSE,
+    KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT,
+    KIND_CRM_ONLINE_BOOKING_SETTINGS, KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE,
+    KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
+    KIND_CRM_WAREHOUSE,
 };
 use buzz_crm::{
     space::PAYLOAD_VERSION, tags, AppointmentPayload, CashShiftPayload, FiscalReceiptPayload,
-    PartyPayload, ProductPayload, SalePayload, SaleVoidPayload, SchedulePayload, SpacePayload,
-    SpaceSettings, StaffPayload, WarehousePayload, WarehouseSeed,
+    OnlineBookingSettings, PartyPayload, ProductPayload, SalePayload, SaleVoidPayload,
+    SchedulePayload, SpacePayload, SpaceSettings, StaffPayload, WarehousePayload, WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -299,6 +300,30 @@ pub fn build_crm_appointment(
         event_tags.push(revision_tag(revision)?);
     }
     Ok(EventBuilder::new(Kind::Custom(KIND_CRM_APPOINTMENT as u16), content).tags(event_tags))
+}
+
+/// Build the kind 42135 event that saves the space's online booking page.
+/// `expected_revision` is `None` the first time.
+pub fn build_crm_online_booking_settings(
+    channel_id: Uuid,
+    mut settings: OnlineBookingSettings,
+    expected_revision: Option<&str>,
+) -> Result<EventBuilder, SdkError> {
+    settings.v = PAYLOAD_VERSION;
+    let raw =
+        serde_json::to_string(&settings).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = OnlineBookingSettings::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let mut event_tags = vec![tag(&["h", &channel_id.to_string()])?];
+    if let Some(revision) = expected_revision {
+        event_tags.push(revision_tag(revision)?);
+    }
+    Ok(EventBuilder::new(
+        Kind::Custom(KIND_CRM_ONLINE_BOOKING_SETTINGS as u16),
+        content,
+    )
+    .tags(event_tags))
 }
 
 #[cfg(test)]
@@ -609,5 +634,37 @@ mod tests {
         assert_eq!(parsed.v, 1);
         assert_eq!(parsed.client_name.as_deref(), Some("Анна"));
         assert!(event.content.contains("\"start\":\"10:00\""));
+    }
+
+    #[test]
+    fn online_booking_settings_builder_validates() {
+        let channel = Uuid::new_v4();
+        let settings = |title: &str| OnlineBookingSettings {
+            v: 0,
+            enabled: true,
+            title: title.into(),
+            about: None,
+            address: None,
+            phone: None,
+            horizon_days: 30,
+            min_notice_min: 60,
+            step_min: 15,
+            staff_ids: vec![],
+            service_ids: vec![],
+        };
+        assert!(build_crm_online_booking_settings(channel, settings(" "), None).is_err());
+        let event = build_crm_online_booking_settings(channel, settings(" Борода "), None)
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(
+            u32::from(event.kind.as_u16()),
+            KIND_CRM_ONLINE_BOOKING_SETTINGS
+        );
+        assert!(tag_values(&event, "expected-revision").is_empty());
+        assert_eq!(
+            OnlineBookingSettings::parse(&event.content).unwrap().title,
+            "Борода"
+        );
     }
 }

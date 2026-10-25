@@ -3,7 +3,8 @@
 //! [`parties`] (0052), sale documents in [`sales`] (0053) and the read-only
 //! [`analytics`] over them; fiscal receipts and cash shifts in [`fiscal`]
 //! (0054); staff and their working days in [`staff`] (0055); appointments
-//! in [`appointments`] (0056).
+//! in [`appointments`] (0056); the public booking page and its phone codes in
+//! [`booking`] (0061–0062).
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
 //! event and its projection rows commit or roll back together (ADR-0001).
@@ -21,6 +22,7 @@ use crate::{error::Result, CommunityId, Db};
 
 pub mod analytics;
 pub mod appointments;
+pub mod booking;
 pub mod catalog;
 pub mod fiscal;
 pub mod parties;
@@ -31,6 +33,10 @@ pub use analytics::{AnalyticsPeriod, SalesAnalytics};
 pub use appointments::{
     AppointmentQuery, AppointmentServiceWrite, AppointmentWrite, AppointmentWriteOutcome,
     CrmAppointmentRecord, SlotInputs, MAX_APPOINTMENT_RANGE_DAYS,
+};
+pub use booking::{
+    CodeCheck, CodeIssue, CodeIssueOutcome, CodeLimits, OnlineBookingRecord,
+    OnlineBookingWriteOutcome, PublicService, PublicStaff,
 };
 pub use catalog::{
     CrmProductRecord, ProductPage, ProductQuery, ProductWrite, ProductWriteOutcome,

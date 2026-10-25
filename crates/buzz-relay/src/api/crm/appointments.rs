@@ -8,7 +8,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json, Response},
 };
-use chrono::{NaiveDate, Timelike};
+use chrono::{NaiveDate, NaiveDateTime, Timelike};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -47,11 +47,11 @@ pub struct AppointmentParams {
 /// Query parameters of `GET /crm/slots`.
 #[derive(Debug, Deserialize, Default)]
 pub struct SlotParams {
-    date: Option<NaiveDate>,
+    pub(crate) date: Option<NaiveDate>,
     /// Comma-separated product ids, in the order they are performed.
-    service_ids: Option<String>,
-    staff_id: Option<Uuid>,
-    step: Option<u16>,
+    pub(crate) service_ids: Option<String>,
+    pub(crate) staff_id: Option<Uuid>,
+    pub(crate) step: Option<u16>,
 }
 
 fn appointment_query(params: &AppointmentParams) -> Result<AppointmentQuery, &'static str> {
@@ -77,14 +77,14 @@ fn appointment_query(params: &AppointmentParams) -> Result<AppointmentQuery, &'s
     Ok(query)
 }
 
-struct SlotRequest {
-    date: NaiveDate,
-    service_ids: Vec<Uuid>,
-    staff_id: Option<Uuid>,
-    step: u16,
+pub(crate) struct SlotRequest {
+    pub(crate) date: NaiveDate,
+    pub(crate) service_ids: Vec<Uuid>,
+    pub(crate) staff_id: Option<Uuid>,
+    pub(crate) step: u16,
 }
 
-fn slot_request(params: &SlotParams) -> Result<SlotRequest, String> {
+pub(crate) fn slot_request(params: &SlotParams) -> Result<SlotRequest, String> {
     let date = params.date.ok_or("date is required")?;
     let raw = params.service_ids.as_deref().unwrap_or_default();
     let mut service_ids = Vec::new();
@@ -113,7 +113,7 @@ fn slot_request(params: &SlotParams) -> Result<SlotRequest, String> {
     })
 }
 
-fn intervals_of(value: &Value) -> Vec<WorkInterval> {
+pub(crate) fn intervals_of(value: &Value) -> Vec<WorkInterval> {
     value
         .as_array()
         .map(|list| {
@@ -129,8 +129,13 @@ fn intervals_of(value: &Value) -> Vec<WorkInterval> {
         .unwrap_or_default()
 }
 
-/// Free starts of every capable staff member, or a client error.
-fn slots_json(request: &SlotRequest, inputs: &SlotInputs) -> Result<Value, String> {
+/// Free starts of every capable staff member no earlier than `earliest`
+/// (space-local time), or a client error.
+pub(crate) fn slots_json(
+    request: &SlotRequest,
+    inputs: &SlotInputs,
+    earliest: NaiveDateTime,
+) -> Result<Value, String> {
     if inputs.services.len() != request.service_ids.len() {
         let missing = request
             .service_ids
@@ -146,12 +151,11 @@ fn slots_json(request: &SlotRequest, inputs: &SlotInputs) -> Result<Value, Strin
         duration += u32::try_from(minutes).unwrap_or(0);
         total += price;
     }
-    let today = inputs.now_local.date();
-    let not_before = if request.date < today {
+    let not_before = if request.date < earliest.date() {
         None
-    } else if request.date == today {
-        let now = inputs.now_local.time();
-        u16::try_from(now.hour() * 60 + now.minute() + 1).ok()
+    } else if request.date == earliest.date() {
+        let at = earliest.time();
+        u16::try_from(at.hour() * 60 + at.minute() + 1).ok()
     } else {
         Some(0)
     };
@@ -281,7 +285,7 @@ pub async fn slots(
         Ok(None) => return not_found("CRM space not found").into_response(),
         Err(e) => return internal_error(&format!("CRM slots read: {e}")).into_response(),
     };
-    match slots_json(&request, &inputs) {
+    match slots_json(&request, &inputs, inputs.now_local) {
         Ok(body) => Json(body).into_response(),
         Err(message) => api_error(StatusCode::BAD_REQUEST, &message).into_response(),
     }
@@ -305,6 +309,10 @@ mod tests {
         }
     }
 
+    fn at(now: &str) -> NaiveDateTime {
+        now.parse().unwrap()
+    }
+
     fn request(date: &str, step: u16) -> SlotRequest {
         SlotRequest {
             date: date.parse().unwrap(),
@@ -316,18 +324,33 @@ mod tests {
 
     #[test]
     fn slots_skip_busy_time_and_the_past() {
-        let body = slots_json(&request("2026-11-02", 60), &inputs("2026-11-01T12:00:00")).unwrap();
+        let body = slots_json(
+            &request("2026-11-02", 60),
+            &inputs("2026-11-01T12:00:00"),
+            at("2026-11-01T12:00:00"),
+        )
+        .unwrap();
         assert_eq!(
             body["staff"][0]["starts"],
             json!(["11:00", "12:00", "13:00", "15:00", "16:00", "17:00", "18:00", "19:00"])
         );
         assert_eq!(body["duration_min"], json!(60));
-        let today = slots_json(&request("2026-11-02", 60), &inputs("2026-11-02T15:10:00")).unwrap();
+        let today = slots_json(
+            &request("2026-11-02", 60),
+            &inputs("2026-11-02T15:10:00"),
+            at("2026-11-02T15:10:00"),
+        )
+        .unwrap();
         assert_eq!(
             today["staff"][0]["starts"],
             json!(["16:00", "17:00", "18:00", "19:00"])
         );
-        let past = slots_json(&request("2026-11-02", 60), &inputs("2026-11-03T09:00:00")).unwrap();
+        let past = slots_json(
+            &request("2026-11-02", 60),
+            &inputs("2026-11-03T09:00:00"),
+            at("2026-11-03T09:00:00"),
+        )
+        .unwrap();
         assert_eq!(past["staff"][0]["starts"], json!([]));
     }
 
@@ -346,7 +369,12 @@ mod tests {
         assert!(slot_request(&params(&id, Some(7))).is_err());
         let mut missing = inputs("2026-11-01T12:00:00");
         missing.services.clear();
-        assert!(slots_json(&request("2026-11-02", 15), &missing).is_err());
+        assert!(slots_json(
+            &request("2026-11-02", 15),
+            &missing,
+            at("2026-11-01T12:00:00")
+        )
+        .is_err());
     }
 
     #[test]

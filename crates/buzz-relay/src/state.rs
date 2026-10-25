@@ -749,6 +749,8 @@ pub struct AppState {
     /// generate fresh Nostr keys.
     pub invite_claim_rate_limiter:
         Arc<moka::sync::Cache<ScopedPubkeyKey, Arc<std::sync::atomic::AtomicU32>>>,
+    /// Per-address hourly counters of the public booking page.
+    pub public_booking_limiter: Arc<crate::api::public_booking::RateLimiter>,
     /// Current in-flight media uploads per (community, uploader pubkey).
     pub media_uploads_in_flight: Arc<DashMap<ScopedPubkeyKey, u32>>,
     /// Cache for observer agent-owner authorization (kind 24200).
@@ -959,6 +961,7 @@ impl AppState {
                     .time_to_live(crate::api::invites::CLAIM_RATE_WINDOW)
                     .build(),
             ),
+            public_booking_limiter: Arc::new(crate::api::public_booking::rate_limiter()),
             media_uploads_in_flight: Arc::new(DashMap::new()),
             observer_owner_cache: Arc::new(
                 moka::sync::Cache::builder()

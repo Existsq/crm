@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Онлайн-запись</title>
+<style>
+:root {
+  --bg: #f6f5f2; --card: #ffffff; --text: #1d1d1f; --muted: #6b6b70;
+  --line: #e4e2dd; --accent: #1f6f5c; --accent-text: #ffffff; --soft: #e7f1ee;
+  --danger: #b3261e; --radius: 14px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416; --card: #1e1e21; --text: #f2f2f4; --muted: #a0a0a8;
+    --line: #333338; --accent: #5fc4a8; --accent-text: #0d1f1a; --soft: #1f2f2a;
+    --danger: #ff8a80;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+main { max-width: 560px; margin: 0 auto; padding: 20px 16px 96px; }
+header h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+header p { margin: 2px 0; color: var(--muted); white-space: pre-line; }
+.steps { display: flex; gap: 6px; margin: 18px 0 14px; }
+.steps span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.steps span.on { background: var(--accent); }
+h2 { font-size: 1.15rem; margin: 18px 0 10px; }
+h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.option {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px; text-align: left;
+  background: var(--card); color: inherit; border: 1px solid var(--line); border-radius: var(--radius);
+  font: inherit; cursor: pointer;
+}
+.option:hover { border-color: var(--accent); }
+.option[aria-pressed="true"], .option[aria-checked="true"] { border-color: var(--accent); background: var(--soft); }
+.option .main { flex: 1; min-width: 0; }
+.option .title { font-weight: 600; }
+.option .sub { color: var(--muted); font-size: .9rem; }
+.option .side { font-weight: 600; white-space: nowrap; }
+.check {
+  width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line); flex: none;
+  display: grid; place-items: center; font-size: 14px; color: var(--accent-text);
+}
+[aria-checked="true"] .check { background: var(--accent); border-color: var(--accent); }
+.days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+.day {
+  flex: none; width: 58px; padding: 8px 0; text-align: center; border-radius: 12px; scroll-snap-align: start;
+  border: 1px solid var(--line); background: var(--card); color: inherit; font: inherit; cursor: pointer;
+}
+.day small { display: block; color: var(--muted); font-size: .75rem; }
+.day b { font-size: 1.1rem; }
+.day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.day[aria-pressed="true"] small { color: inherit; }
+.times { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.time {
+  padding: 10px 0; border-radius: 10px; border: 1px solid var(--line); background: var(--card);
+  color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+}
+.time[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+label { display: block; font-weight: 600; margin: 14px 0 6px; }
+input, textarea {
+  width: 100%; padding: 12px 14px; font: inherit; color: inherit; background: var(--card);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+textarea { min-height: 72px; resize: vertical; }
+.code { letter-spacing: .4em; font-size: 1.4rem; text-align: center; font-variant-numeric: tabular-nums; }
+.hint { color: var(--muted); font-size: .9rem; margin: 6px 0 0; }
+.error { color: var(--danger); margin: 10px 0 0; }
+.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--card); border-top: 1px solid var(--line);
+}
+.bar .inner { max-width: 560px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+.bar .summary { flex: 1; min-width: 0; font-size: .9rem; color: var(--muted); }
+.bar .summary b { color: var(--text); display: block; font-size: 1rem; }
+.btn {
+  padding: 13px 20px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-text);
+  font: inherit; font-weight: 700; cursor: pointer;
+}
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+.link { background: none; border: 0; color: var(--accent); font: inherit; padding: 0; cursor: pointer; text-decoration: underline; }
+.done { padding: 22px; text-align: center; }
+.done .mark { font-size: 2.6rem; }
+.done dl { text-align: left; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 18px 0 0; }
+.done dt { color: var(--muted); }
+.done dd { margin: 0; font-weight: 600; }
+.empty { padding: 18px; text-align: center; color: var(--muted); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Онлайн-запись</h1>
+    <p id="about"></p>
+    <p id="contacts"></p>
+  </header>
+  <div class="steps" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+  <div id="view" aria-live="polite"></div>
+  <p id="error" class="error" role="alert"></p>
+</main>
+<div class="bar" id="bar" hidden>
+  <div class="inner">
+    <div class="summary" id="summary"></div>
+    <button type="button" class="btn ghost" id="back">Назад</button>
+    <button type="button" class="btn" id="next">Далее</button>
+  </div>
+</div>
+<script>
+"use strict";
+(() => {
+  const ANY = "any";
+  const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+  const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
+    "сентября", "октября", "ноября", "декабря"];
+  const ERRORS = {
+    unavailable: "Онлайн-запись сейчас недоступна. Позвоните нам, пожалуйста.",
+    rate_limited: "Слишком много запросов. Попробуйте чуть позже.",
+    invalid_phone: "Проверьте номер телефона.",
+    invalid_name: "Укажите имя (до 128 символов).",
+    retry_later: "Код уже отправлен. Новый можно запросить через минуту.",
+    phone_limit: "На этот номер сегодня отправлено слишком много кодов.",
+    busy: "Сейчас не получается отправить код. Попробуйте позже.",
+    sms_failed: "Не удалось отправить SMS. Попробуйте позже.",
+    code_expired: "Код устарел. Запросите новый.",
+    code_locked: "Слишком много неверных попыток. Запросите новый код.",
+    code_used: "По этому коду уже есть запись. Запросите новый код.",
+    slot_taken: "Это время только что заняли. Выберите другое.",
+    too_late: "Это время уже нельзя забронировать онлайн. Выберите другое.",
+    staff_unavailable: "Мастер не выполняет выбранные услуги.",
+  };
+
+  const state = {
+    info: null, step: 0, services: [], staff: ANY, date: null, slots: null, time: null,
+    name: "", phone: "", note: "", verification: null, code: "", resendAt: 0, done: null,
+  };
+  const view = document.getElementById("view");
+  const errorBox = document.getElementById("error");
+  const bar = document.getElementById("bar");
+  const next = document.getElementById("next");
+  const back = document.getElementById("back");
+  const summary = document.getElementById("summary");
+
+  function el(tag, attrs, ...children) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs || {})) {
+      if (value === null || value === undefined || value === false) continue;
+      if (key === "class") node.className = value;
+      else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+      else node.setAttribute(key, value === true ? "" : value);
+    }
+    for (const child of children.flat()) {
+      if (child === null || child === undefined || child === false) continue;
+      node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    }
+    return node;
+  }
+
+  function money(minor) {
+    const currency = (state.info && state.info.currency) || "RUB";
+    try {
+      return new Intl.NumberFormat("ru-RU", { style: "currency", currency, maximumFractionDigits: minor % 100 ? 2 : 0 }).format(minor / 100);
+    } catch (_) {
+      return (minor / 100).toFixed(2);
+    }
+  }
+
+  function minutes(total) {
+    const h = Math.floor(total / 60), m = total % 60;
+    return [h ? h + " ч" : "", m ? m + " мин" : ""].filter(Boolean).join(" ") || "0 мин";
+  }
+
+  function parseDay(iso) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  function isoDay(date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  function longDay(iso) {
+    const date = parseDay(iso);
+    return WEEKDAYS[date.getUTCDay()] + ", " + date.getUTCDate() + " " + MONTHS[date.getUTCMonth()];
+  }
+
+  async function api(path, options) {
+    let response;
+    try {
+      response = await fetch(path, Object.assign({ headers: { "content-type": "application/json" }, credentials: "omit" }, options));
+    } catch (_) {
+      throw { error: "network", message: "Нет связи. Проверьте интернет и попробуйте снова." };
+    }
+    let body = null;
+    try { body = await response.json(); } catch (_) { body = null; }
+    if (!response.ok) throw Object.assign({ status: response.status }, body || { error: "http" });
+    return body;
+  }
+
+  function explain(problem) {
+    if (problem && problem.error === "wrong_code") {
+      const left = problem.attempts_left;
+      return left > 0 ? "Неверный код. Осталось попыток: " + left + "." : ERRORS.code_locked;
+    }
+    if (problem && ERRORS[problem.error]) return ERRORS[problem.error];
+    if (problem && problem.error === "network") return problem.message;
+    return "Что-то пошло не так. Попробуйте ещё раз.";
+  }
+
+  function setError(problem) {
+    errorBox.textContent = problem ? (typeof problem === "string" ? problem : explain(problem)) : "";
+  }
+
+  const selectedServices = () => state.info.services.filter((s) => state.services.includes(s.id));
+  const totalMinutes = () => selectedServices().reduce((sum, s) => sum + s.duration_min, 0);
+  const totalPrice = () => selectedServices().reduce((sum, s) => sum + s.price_minor, 0);
+  const staffFor = () => state.info.staff.filter((m) => state.services.every((id) => m.service_ids.includes(id)));
+  const staffName = (id) => (state.info.staff.find((m) => m.id === id) || {}).name || "";
+
+  function renderSteps() {
+    document.querySelectorAll(".steps span").forEach((span, index) => {
+      span.classList.toggle("on", index <= Math.min(state.step, 3));
+    });
+  }
+
+  function renderBar(label, enabled, onNext) {
+    bar.hidden = false;
+    back.hidden = state.step === 0;
+    next.textContent = label;
+    next.disabled = !enabled;
+    next.onclick = onNext;
+    const parts = [];
+    if (state.services.length) parts.push(el("b", {}, money(totalPrice())), minutes(totalMinutes()));
+    if (state.time) parts.push(" · " + longDay(state.date) + ", " + state.time);
+    summary.replaceChildren(...parts);
+  }
+
+  function go(step) {
+    state.step = step;
+    setError(null);
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  back.addEventListener("click", () => go(Math.max(0, state.step - 1)));
+
+  function renderServices() {
+    const groups = new Map();
+    for (const service of state.info.services) {
+      const key = service.category || "Услуги";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(service);
+    }
+    const nodes = [el("h2", {}, "Выберите услуги")];
+    if (!state.info.services.length) nodes.push(el("div", { class: "card empty" }, "Пока нет услуг для онлайн-записи."));
+    for (const [category, services] of groups) {
+      if (groups.size > 1) nodes.push(el("h3", {}, category));
+      nodes.push(el("div", { class: "list", role: "group", "aria-label": category }, services.map((service) => {
+        const on = state.services.includes(service.id);
+        return el("button", {
+          type: "button", class: "option", role: "checkbox", "aria-checked": String(on),
+          onclick: () => {
+            state.services = on ? state.services.filter((id) => id !== service.id) : state.services.concat(service.id);
+            if (state.staff !== ANY && !staffFor().some((m) => m.id === state.staff)) state.staff = ANY;
+            state.time = null;
+            render();
+          },
+        },
+        el("span", { class: "check", "aria-hidden": "true" }, on ? "✓" : ""),
+        el("span", { class: "main" }, el("span", { class: "title" }, service.name), el("br"), el("span", { class: "sub" }, minutes(service.duration_min))),
+        el("span", { class: "side" }, money(service.price_minor)));
+      })));
+    }
+    const nobody = state.services.length > 0 && staffFor().length === 0;
+    if (nobody) nodes.push(el("p", { class: "error" }, "Ни один мастер не выполняет все выбранные услуги вместе. Уберите одну из них."));
+    view.replaceChildren(...nodes);
+    renderBar("Далее", state.services.length > 0 && !nobody, () => go(1));
+  }
+
+  function renderStaff() {
+    const choices = [{ id: ANY, name: "Любой мастер", position: "Подберём свободного" }].concat(staffFor());
+    view.replaceChildren(
+      el("h2", {}, "Выберите мастера"),
+      el("div", { class: "list", role: "radiogroup", "aria-label": "Мастер" }, choices.map((member) => el("button", {
+        type: "button", class: "option", role: "radio", "aria-checked": String(state.staff === member.id),
+        onclick: () => { state.staff = member.id; state.time = null; state.slots = null; render(); },
+      }, el("span", { class: "main" }, el("span", { class: "title" }, member.name),
+        member.position ? el("br") : null, member.position ? el("span", { class: "sub" }, member.position) : null)))),
+    );
+    renderBar("Далее", true, () => go(2));
+  }
+
+  async function loadSlots() {
+    const date = state.date;
+    state.slots = null;
+    render();
+    const query = new URLSearchParams({ date, service_ids: state.services.join(",") });
+    if (state.staff !== ANY) query.set("staff_id", state.staff);
+    try {
+      const body = await api("/public/booking/slots?" + query.toString());
+      if (state.date === date) { state.slots = body.staff; render(); }
+    } catch (problem) {
+      if (state.date === date) { state.slots = []; setError(problem); render(); }
+    }
+  }
+
+  function freeTimes() {
+    const times = new Map();
+    for (const member of state.slots || []) {
+      for (const start of member.starts) if (!times.has(start)) times.set(start, member.staff_id);
+    }
+    return [...times.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }
+
+  function renderTime() {
+    const first = parseDay(state.info.today), last = parseDay(state.info.last_day);
+    if (!state.date) { state.date = state.info.today; loadSlots(); return; }
+    const days = [];
+    for (let day = first; day <= last; day = new Date(day.getTime() + 86400000)) days.push(isoDay(day));
+    const strip = el("div", { class: "days", role: "group", "aria-label": "Дата" }, days.map((iso) => {
+      const date = parseDay(iso);
+      return el("button", {
+        type: "button", class: "day", "aria-pressed": String(iso === state.date), "aria-label": longDay(iso),
+        onclick: () => { state.date = iso; state.time = null; loadSlots(); },
+      }, el("small", {}, WEEKDAYS[date.getUTCDay()]), el("b", {}, date.getUTCDate()));
+    }));
+    const nodes = [el("h2", {}, "Выберите дату и время"), strip, el("h3", {}, longDay(state.date))];
+    if (state.slots === null) nodes.push(el("div", { class: "card empty" }, "Ищем свободное время…"));
+    else {
+      const times = freeTimes();
+      if (!times.length) nodes.push(el("div", { class: "card empty" }, "На этот день свободного времени нет. Выберите другой."));
+      else nodes.push(el("div", { class: "times", role: "radiogroup", "aria-label": "Время" }, times.map(([time, staffId]) => el("button", {
+        type: "button", class: "time", role: "radio", "aria-checked": String(state.time === time),
+        onclick: () => { state.time = time; state.timeStaff = staffId; render(); },
+      }, time))));
+    }
+    view.replaceChildren(...nodes);
+    requestAnimationFrame(() => {
+      const current = strip.querySelector('[aria-pressed="true"]');
+      if (current) current.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+    renderBar("Далее", Boolean(state.time), () => go(3));
+  }
+
+  function bookingStaff() {
+    return state.staff === ANY ? state.timeStaff : state.staff;
+  }
+
+  async function requestCode() {
+    setError(null);
+    next.disabled = true;
+    try {
+      const body = await api("/public/booking/code", { method: "POST", body: JSON.stringify({ phone: state.phone }) });
+      state.verification = body.verification_id;
+      state.resendAt = Date.now() + body.resend_after * 1000;
+      state.code = body.dev_code || "";
+      render();
+      const input = document.getElementById("code");
+      if (input) input.focus();
+    } catch (problem) {
+      setError(problem);
+      render();
+    }
+  }
+
+  async function confirm() {
+    setError(null);
+    next.disabled = true;
+    const payload = {
+      verification_id: state.verification, code: state.code, staff_id: bookingStaff(),
+      date: state.date, start: state.time, service_ids: state.services, client_name: state.name,
+      note: state.note.trim() || null,
+    };
+    try {
+      state.done = await api("/public/booking/appointments", { method: "POST", body: JSON.stringify(payload) });
+      go(4);
+    } catch (problem) {
+      if (problem.error === "slot_taken" || problem.error === "too_late") {
+        state.time = null;
+        go(2);
+        setError(problem);
+        loadSlots();
+        return;
+      }
+      if (["code_expired", "code_locked", "code_used"].includes(problem.error)) {
+        state.verification = null;
+        state.code = "";
+      }
+      setError(problem);
+      render();
+    }
+  }
+
+  function renderContacts() {
+    const nodes = [el("h2", {}, "Ваши контакты"),
+      el("label", { for: "name" }, "Имя"),
+      el("input", { id: "name", autocomplete: "name", maxlength: "128", value: state.name, oninput: (e) => { state.name = e.target.value; refresh(); } }),
+      el("label", { for: "phone" }, "Телефон"),
+      el("input", { id: "phone", type: "tel", inputmode: "tel", autocomplete: "tel", placeholder: "+7 900 000-00-00", maxlength: "32", value: state.phone,
+        oninput: (e) => { state.phone = e.target.value; if (state.verification) { state.verification = null; state.code = ""; render(); } else refresh(); } }),
+      el("label", { for: "note" }, "Комментарий для мастера"),
+      el("textarea", { id: "note", maxlength: "500", oninput: (e) => { state.note = e.target.value; } }, state.note)];
+    if (state.verification) {
+      const wait = Math.max(0, Math.ceil((state.resendAt - Date.now()) / 1000));
+      nodes.push(
+        el("label", { for: "code" }, "Код из SMS"),
+        el("input", { id: "code", class: "code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: String(state.info.code_digits), value: state.code,
+          oninput: (e) => { state.code = e.target.value.replace(/\D/g, ""); e.target.value = state.code; refresh(); } }),
+        el("p", { class: "hint" }, "Мы отправили код на " + state.phone + ". ",
+          wait > 0 ? "Новый код — через " + wait + " с." : el("button", { type: "button", class: "link", onclick: requestCode }, "Отправить ещё раз")),
+      );
+      if (wait > 0) setTimeout(() => { if (state.step === 3 && state.verification) render(); }, 1000);
+    } else {
+      nodes.push(el("p", { class: "hint" }, "Пришлём код в SMS, чтобы подтвердить номер."));
+    }
+    view.replaceChildren(...nodes);
+    refresh();
+  }
+
+  function refresh() {
+    if (state.step !== 3) return;
+    const ready = state.name.trim().length > 0 && state.phone.replace(/\D/g, "").length >= 10;
+    if (state.verification) renderBar("Записаться", ready && state.code.length === state.info.code_digits, confirm);
+    else renderBar("Получить код", ready, requestCode);
+  }
+
+  function renderDone() {
+    bar.hidden = true;
+    const done = state.done;
+    view.replaceChildren(el("div", { class: "card done" },
+      el("div", { class: "mark", "aria-hidden": "true" }, "✓"),
+      el("h2", {}, "Вы записаны"),
+      el("p", {}, "Ждём вас! Если планы изменятся, позвоните нам."),
+      el("dl", {},
+        el("dt", {}, "Когда"), el("dd", {}, longDay(done.date) + ", " + done.start + "–" + done.end),
+        el("dt", {}, "Мастер"), el("dd", {}, done.staff_name),
+        el("dt", {}, "Услуги"), el("dd", {}, done.services.join(", ")),
+        el("dt", {}, "Стоимость"), el("dd", {}, money(done.total_minor)),
+        done.address ? [el("dt", {}, "Адрес"), el("dd", {}, done.address)] : null,
+        done.phone ? [el("dt", {}, "Телефон"), el("dd", {}, done.phone)] : null),
+      el("p", {}, el("button", { type: "button", class: "btn ghost", onclick: () => {
+        Object.assign(state, { step: 0, services: [], staff: ANY, date: null, slots: null, time: null, verification: null, code: "", done: null });
+        render();
+      } }, "Записаться ещё"))));
+  }
+
+  function render() {
+    renderSteps();
+    [renderServices, renderStaff, renderTime, renderContacts, renderDone][state.step]();
+  }
+
+  async function start() {
+    try {
+      state.info = await api("/public/booking");
+    } catch (problem) {
+      view.replaceChildren(el("div", { class: "card empty" }, explain(problem.error === "http" ? { error: "unavailable" } : problem)));
+      return;
+    }
+    const info = state.info;
+    document.title = "Запись — " + info.title;
+    document.getElementById("title").textContent = info.title;
+    document.getElementById("about").textContent = info.about || "";
+    document.getElementById("contacts").textContent = [info.address, info.phone].filter(Boolean).join(" · ");
+    render();
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
