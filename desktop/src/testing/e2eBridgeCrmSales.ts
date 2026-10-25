@@ -487,6 +487,13 @@ function analytics(
   };
 }
 
+/** A mock party, for the journal mock's client lookups. */
+export function mockCrmPartyById(
+  partyId: string,
+): { name: string; phone: string | null } | undefined {
+  return parties.find((party) => party.id === partyId);
+}
+
 /** A mock sale as the cash-desk mock reads it. */
 export function mockCrmSaleById(saleId: string): MockSale | undefined {
   return sales.find((sale) => sale.id === saleId);

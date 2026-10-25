@@ -17,22 +17,41 @@ export type DescribedCrmError = {
 
 const RELAY_PREFIXES = ["restricted", "conflict", "invalid"] as const;
 
-/** Conflicts that name a duplicate value get a message naming it too. */
-const DUPLICATE_CONFLICTS: ReadonlyArray<{
+/** Relay reasons with a specific message; `{value}` is the first group. */
+const KNOWN_REASONS: ReadonlyArray<{
+  prefix: (typeof RELAY_PREFIXES)[number];
   pattern: RegExp;
   template: string;
 }> = [
   {
+    prefix: "conflict",
     pattern: /^SKU "?(.+?)"? is already used by another product/,
     template: ru.errors.skuTaken,
   },
   {
+    prefix: "conflict",
     pattern: /^barcode "?([^"\s]+)"? is already used by another product/,
     template: ru.errors.barcodeTaken,
   },
   {
+    prefix: "conflict",
     pattern: /^INN (\d+) is already used by another party/,
     template: ru.errors.innTaken,
+  },
+  {
+    prefix: "conflict",
+    pattern: /^the staff member is booked (\S+)/,
+    template: ru.errors.staffBusy,
+  },
+  {
+    prefix: "invalid",
+    pattern: /^the visit is outside the staff member's working hours()/,
+    template: ru.errors.outsideHours,
+  },
+  {
+    prefix: "invalid",
+    pattern: /^the visit is paid()/,
+    template: ru.errors.visitPaid,
   },
 ];
 
@@ -40,11 +59,9 @@ function relayMessage(
   prefix: (typeof RELAY_PREFIXES)[number],
   reason: string,
 ): string {
-  if (prefix === "conflict") {
-    for (const { pattern, template } of DUPLICATE_CONFLICTS) {
-      const match = pattern.exec(reason);
-      if (match) return template.replace("{value}", match[1]);
-    }
+  for (const known of KNOWN_REASONS) {
+    const match = known.prefix === prefix && known.pattern.exec(reason);
+    if (match) return known.template.replace("{value}", match[1]);
   }
   return ru.errors[prefix];
 }

@@ -26,6 +26,11 @@ import {
   seedMockCrmCash,
 } from "./e2eBridgeCrmCash.ts";
 import {
+  handleCrmAppointmentMockCommand,
+  type MockCrmAppointmentSeed,
+  seedMockCrmAppointments,
+} from "./e2eBridgeCrmAppointments.ts";
+import {
   handleCrmSalesMockCommand,
   type MockCrmPartySeed,
   type MockCrmSaleSeed,
@@ -77,6 +82,7 @@ export type MockCrmSeed = {
     sales?: MockCrmSaleSeed[];
     cash?: MockCrmCashSeed;
     staff?: MockCrmStaffSeed[];
+    appointments?: MockCrmAppointmentSeed[];
   } | null;
 };
 
@@ -150,6 +156,7 @@ export function resetMockCrm(): void {
   seedMockCrmSales();
   seedMockCrmCash();
   seedMockCrmStaff();
+  seedMockCrmAppointments();
 }
 
 export function seedMockCrm(seed: MockCrmSeed): void {
@@ -161,6 +168,7 @@ export function seedMockCrm(seed: MockCrmSeed): void {
   );
   seedMockCrmCash(seed.space?.cash);
   seedMockCrmStaff(seed.space?.staff ?? []);
+  seedMockCrmAppointments(seed.space?.appointments ?? []);
   state = {
     canCreate: seed.canCreate ?? true,
     loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
@@ -379,6 +387,11 @@ export function handleCrmMockCommand(
         requireCapability,
       });
       if (staff) return staff;
+      const journal = handleCrmAppointmentMockCommand(command, payload, {
+        channelId: state.space?.role ? state.space.channelId : null,
+        requireCapability,
+      });
+      if (journal) return journal;
       const result = handleCrmProductMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

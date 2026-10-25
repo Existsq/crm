@@ -224,6 +224,26 @@ function setSchedule(
   return { event_id: revision, entity_id: null };
 }
 
+/** A mock staff member, for the journal mock. */
+export function mockCrmStaffById(staffId: string): RawCrmStaff | undefined {
+  return staff.find((s) => s.id === staffId);
+}
+
+/** Working intervals of one staff member on `date`; `[]` when unscheduled. */
+export function mockCrmStaffIntervals(
+  staffId: string,
+  date: string,
+): CrmWorkInterval[] {
+  return (
+    days.find((d) => d.staff_id === staffId && d.date === date)?.intervals ?? []
+  );
+}
+
+/** Active staff members, for the slot mock. */
+export function mockCrmActiveStaff(): RawCrmStaff[] {
+  return staff.filter((s) => !s.archived);
+}
+
 /** Handle a staff command, or `undefined` for anything else. */
 export function handleCrmStaffMockCommand(
   command: string,
