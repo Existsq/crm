@@ -17,6 +17,8 @@ pub const KIND_CRM_PRODUCT: u16 = 42102;
 pub const KIND_CRM_PARTY: u16 = 42103;
 pub const KIND_CRM_SALE: u16 = 42104;
 pub const KIND_CRM_SALE_VOID: u16 = 42105;
+pub const KIND_CRM_FISCAL_RECEIPT: u16 = 42120;
+pub const KIND_CRM_CASH_SHIFT: u16 = 42121;
 
 pub fn relay_url() -> String {
     std::env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:3000".to_string())
@@ -154,6 +156,9 @@ pub async fn grant_community_role(pool: &sqlx::PgPool, community: Uuid, keys: &K
 /// rows directly is test-only; the relay never deletes CRM rows.
 pub async fn cleanup_space(pool: &sqlx::PgPool, community: Uuid) {
     for sql in [
+        "DELETE FROM crm_fiscal_receipts WHERE community_id = $1",
+        "DELETE FROM crm_cash_shifts WHERE community_id = $1",
+        "DELETE FROM crm_sale_payments WHERE community_id = $1",
         "DELETE FROM crm_sale_lines WHERE community_id = $1",
         "DELETE FROM crm_sales WHERE community_id = $1",
         "DELETE FROM crm_parties WHERE community_id = $1",

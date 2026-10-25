@@ -207,7 +207,8 @@ async fn sell(
             amount_minor: units * price,
         })
         .collect();
-    let total = inserts.iter().map(|line| line.amount_minor).sum();
+    let total: i64 = inserts.iter().map(|line| line.amount_minor).sum();
+    let payments = [(payment, total)];
     let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
     let number = insert_sale(
         &mut tx,
@@ -225,6 +226,8 @@ async fn sell(
             event_id: &event,
             actor: &fx.actor,
             lines: &inserts,
+            payments: &payments,
+            cash_tendered_minor: None,
         },
     )
     .await
@@ -652,4 +655,117 @@ async fn analytics_use_space_days_and_skip_voided_sales() {
     assert_eq!(none.totals.sales_count, 0);
     assert_eq!(none.totals.avg_check_minor, 0);
     assert!(none.by_day.is_empty() && none.top_products.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres"]
+async fn receipts_and_shifts_are_recorded_once_and_totalled() {
+    use crate::crm::fiscal::{
+        list_shifts, record_receipt, record_shift, ReceiptOutcome, ReceiptWrite, ShiftOutcome,
+        ShiftWrite,
+    };
+    let fx = fixture().await;
+    let kefir = product(&fx, "Кефир").await;
+    let (sale, _) = sell(&fx, None, "cash", local(20, 10), &[(kefir, 2, 9_000)]).await;
+
+    let shift = |action: &'static str, document: i64| ShiftWrite {
+        space_channel_id: fx.space,
+        action,
+        fn_number: "9999078900004792",
+        shift_number: 1,
+        document_number: document,
+        document_datetime: "2026-10-20T09:00:00+00:00",
+        actor: &fx.actor,
+    };
+    let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
+    assert_eq!(
+        record_shift(&mut tx, fx.community, &shift("open", 1)).await.unwrap(),
+        ShiftOutcome::Recorded
+    );
+    assert_eq!(
+        record_shift(&mut tx, fx.community, &shift("open", 1)).await.unwrap(),
+        ShiftOutcome::AlreadyRecorded
+    );
+    tx.commit().await.unwrap();
+
+    let receipt = |operation: &'static str, total: i64, document: i64| ReceiptWrite {
+        sale_id: sale,
+        space_channel_id: fx.space,
+        operation,
+        total_minor: total,
+        task_uuid: Uuid::new_v4(),
+        document_number: document,
+        document_sign: "123456",
+        receipt_number: 1,
+        shift_number: 1,
+        fn_number: "9999078900004792",
+        registration_number: None,
+        document_datetime: "2026-10-20T10:00:00+00:00",
+        event_id: &[3; 32],
+        actor: &fx.actor,
+    };
+    let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
+    assert_eq!(
+        record_receipt(&mut tx, fx.community, &receipt("sell", 1, 2)).await.unwrap(),
+        ReceiptOutcome::TotalMismatch { expected: 18_000 }
+    );
+    assert_eq!(
+        record_receipt(&mut tx, fx.community, &receipt("sell_return", 18_000, 2))
+            .await
+            .unwrap(),
+        ReceiptOutcome::NotReturnable
+    );
+    assert_eq!(
+        record_receipt(&mut tx, fx.community, &receipt("sell", 18_000, 2)).await.unwrap(),
+        ReceiptOutcome::Recorded
+    );
+    assert_eq!(
+        record_receipt(&mut tx, fx.community, &receipt("sell", 18_000, 3)).await.unwrap(),
+        ReceiptOutcome::AlreadyRecorded
+    );
+    tx.commit().await.unwrap();
+
+    let stored = fx
+        .db
+        .crm_get_sale(fx.community, fx.space, sale)
+        .await
+        .unwrap()
+        .unwrap();
+    let fiscal = stored.fiscal.sell.unwrap();
+    assert_eq!((fiscal.document_number, fiscal.total_minor), (2, 18_000));
+    assert_eq!(stored.payments[0].method, "cash");
+    assert!(stored.fiscal.sell_return.is_none());
+
+    let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
+    void_sale(&mut tx, fx.community, fx.space, sale, &[4; 32], "возврат", &fx.actor)
+        .await
+        .unwrap();
+    // A second receipt cannot reuse the ФН document number.
+    assert_eq!(
+        record_receipt(&mut tx, fx.community, &receipt("sell_return", 18_000, 2))
+            .await
+            .unwrap(),
+        ReceiptOutcome::DocumentTaken
+    );
+    tx.rollback().await.unwrap();
+    let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
+    void_sale(&mut tx, fx.community, fx.space, sale, &[4; 32], "возврат", &fx.actor)
+        .await
+        .unwrap();
+    assert_eq!(
+        record_receipt(&mut tx, fx.community, &receipt("sell_return", 18_000, 4))
+            .await
+            .unwrap(),
+        ReceiptOutcome::Recorded
+    );
+    record_shift(&mut tx, fx.community, &shift("close", 5)).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let shifts = list_shifts(&fx.db.pool, fx.community, fx.space, 5).await.unwrap();
+    assert_eq!(shifts.len(), 1);
+    let shift = &shifts[0];
+    assert!(shift.closed);
+    assert_eq!((shift.sell_count, shift.sell_total_minor), (1, 18_000));
+    assert_eq!((shift.return_count, shift.return_total_minor), (1, 18_000));
+    assert_eq!(shift.cash_minor, 0);
 }

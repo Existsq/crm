@@ -394,3 +394,97 @@ async fn reads_require_space_membership() {
         assert_eq!(status, 403, "{path}");
     }
 }
+
+#[tokio::test]
+#[ignore = "requires a running relay"]
+async fn split_payments_receipts_and_shifts_are_recorded() {
+    let pool = pool().await;
+    let (owner, channel, warehouse) = space(&pool).await;
+    let cashier = Keys::generate();
+    let bot = Keys::generate();
+    add_member(&owner, channel, &cashier, "member").await;
+    add_member(&owner, channel, &bot, "bot").await;
+    let kefir = product(&owner, channel, "Кефир", "piece").await;
+
+    let mut payload = sale(
+        warehouse,
+        None,
+        json!([{"product_id": kefir, "qty_milli": 3000, "price_minor": 9000}]),
+    );
+    payload["payment"] = json!("cash");
+    payload["payments"] = json!([
+        {"method": "cash", "amount_minor": 20_000},
+        {"method": "card", "amount_minor": 7_000}
+    ]);
+    payload["cash_tendered_minor"] = json!(50_000);
+    let sale_id = Uuid::new_v4();
+    accept(
+        &cashier,
+        &entity_event(&cashier, KIND_CRM_SALE, channel, sale_id, &payload, None),
+    )
+    .await;
+    let mut wrong = payload.clone();
+    wrong["payments"][1]["amount_minor"] = json!(6_999);
+    reject(
+        &cashier,
+        &entity_event(&cashier, KIND_CRM_SALE, channel, Uuid::new_v4(), &wrong, None),
+        400,
+        "invalid:",
+    )
+    .await;
+
+    let shift = |action: &str, document: u64| {
+        sign(
+            &cashier,
+            KIND_CRM_CASH_SHIFT,
+            &json!({"v": 1, "action": action, "fn_number": "9999078900004792",
+                    "shift_number": 1, "document_number": document,
+                    "document_datetime": "2026-10-25T09:00:00+00:00"})
+            .to_string(),
+            vec![tag(&["h", &channel.to_string()])],
+        )
+    };
+    accept(&cashier, &shift("open", 1)).await;
+    let receipt = |keys: &Keys, total: i64, document: u64| {
+        sign(
+            keys,
+            KIND_CRM_FISCAL_RECEIPT,
+            &json!({"v": 1, "operation": "sell", "total_minor": total,
+                    "task_uuid": Uuid::new_v4(),
+                    "fiscal": {"document_number": document, "document_sign": "3826380862",
+                               "receipt_number": 1, "shift_number": 1,
+                               "fn_number": "9999078900004792",
+                               "document_datetime": "2026-10-25T10:00:00+00:00"}})
+            .to_string(),
+            vec![tag(&["h", &channel.to_string()]), tag(&["crm-id", &sale_id.to_string()])],
+        )
+    };
+    // Bots may not record fiscal documents; totals must match the sale.
+    reject(&bot, &receipt(&bot, 27_000, 2), 403, "restricted:").await;
+    reject(&cashier, &receipt(&cashier, 26_999, 2), 400, "invalid:").await;
+    accept(&cashier, &receipt(&cashier, 27_000, 2)).await;
+    reject(&cashier, &receipt(&cashier, 27_000, 3), 409, "conflict:").await;
+
+    let (_, body) = get(&cashier, &format!("/crm/sales/{sale_id}")).await;
+    assert_eq!(body["cash_tendered_minor"], json!(50_000), "{body}");
+    assert_eq!(
+        body["payments"],
+        json!([{"method": "cash", "amount_minor": 20_000}, {"method": "card", "amount_minor": 7_000}])
+    );
+    assert_eq!(body["fiscal"]["sell"]["document_number"], json!(2));
+    let (_, analytics) = get(&cashier, "/crm/analytics").await;
+    let payments: Vec<(String, i64)> = analytics["by_payment"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| (b["key"].as_str().unwrap().to_string(), b["revenue_minor"].as_i64().unwrap()))
+        .collect();
+    assert_eq!(payments, vec![("cash".into(), 20_000), ("card".into(), 7_000)]);
+
+    accept(&cashier, &shift("close", 3)).await;
+    let (status, shifts) = get(&cashier, "/crm/shifts").await;
+    assert_eq!(status, 200);
+    assert_eq!(shifts["shifts"][0]["closed"], json!(true));
+    assert_eq!(shifts["shifts"][0]["sell_total_minor"], json!(27_000));
+    assert_eq!(shifts["shifts"][0]["cash_minor"], json!(20_000));
+}
