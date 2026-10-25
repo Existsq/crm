@@ -986,7 +986,7 @@ export const ru = {
     changeUp: "Рост на {value}%",
     changeDown: "Снижение на {value}%",
     changeFlat: "Без изменений",
-    noPrevious: "В прошлом периоде продаж не было",
+    noPrevious: "В прошлом периоде данных нет",
     periodTotal: "Итого {amount}",
     salesCount: "продаж: {count}",
     peakHour: "Пик: {hour}:00",
