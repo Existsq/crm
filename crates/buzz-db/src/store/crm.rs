@@ -3,7 +3,7 @@
 //! [`parties`] (0052), sale documents in [`sales`] (0053) and the read-only
 //! [`analytics`] over them; fiscal receipts and cash shifts in [`fiscal`]
 //! (0054); staff and their working days in [`staff`] (0055); appointments
-//! in [`appointments`] (0056).
+//! in [`appointments`] (0056); visit reminders in [`reminders`] (0064).
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
 //! event and its projection rows commit or roll back together (ADR-0001).
@@ -24,6 +24,7 @@ pub mod appointments;
 pub mod catalog;
 pub mod fiscal;
 pub mod parties;
+pub mod reminders;
 pub mod sales;
 pub mod staff;
 
@@ -39,6 +40,12 @@ pub use catalog::{
 pub use fiscal::{CrmShiftRecord, ReceiptOutcome, ReceiptWrite, ShiftOutcome, ShiftWrite};
 pub use parties::{
     CrmPartyRecord, PartyPage, PartyQuery, PartyRole, PartyWrite, PartyWriteOutcome, MAX_PARTY_PAGE,
+};
+pub use reminders::{
+    BotLinkOutcome, ClaimedDelivery, ClientTelegramOutcome, ClientTelegramRecord,
+    ClientTelegramWrite, DeliveryFinish, DeliveryQuery, PlannedDelivery, ReminderCandidate,
+    ReminderDeliveryRecord, ReminderSettingsOutcome, ReminderSettingsRecord, ReminderSettingsWrite,
+    MAX_DELIVERY_PAGE,
 };
 pub use sales::{
     CrmSaleRecord, SaleInsert, SaleLineInsert, SalePage, SaleQuery, SaleVoidOutcome, MAX_SALE_PAGE,

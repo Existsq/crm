@@ -27,6 +27,7 @@ use crate::{
 pub mod appointments;
 pub mod parties;
 pub mod products;
+pub mod reminders;
 pub mod sales;
 pub mod staff;
 

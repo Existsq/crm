@@ -14,6 +14,7 @@
 //! - [`catalog`] — product payload, units, fiscal item types (kind 42102).
 //! - [`fiscal`] — fiscal receipts and cash-register shifts (kinds 42120, 42121).
 //! - [`party`] — customers and suppliers (kind 42103).
+//! - [`reminder`] — visit reminder rules and Telegram links (kinds 42150, 42151).
 //! - [`sale`] — sale documents and their reversal (kinds 42104, 42105).
 //! - [`staff`] — staff (masters) and their working days (kinds 42131, 42132).
 //! - [`tags`] — tag conventions shared by every CRM event.
@@ -26,6 +27,7 @@ pub mod error;
 pub mod fiscal;
 pub mod money;
 pub mod party;
+pub mod reminder;
 pub mod sale;
 pub mod space;
 pub mod staff;
@@ -44,6 +46,9 @@ pub use fiscal::{
 };
 pub use money::{line_amount, Money, Qty};
 pub use party::{PartyPayload, PartyType};
+pub use reminder::{
+    ClientTelegramPayload, ReminderContext, ReminderRule, ReminderSettingsPayload, ReminderTrigger,
+};
 pub use sale::{PaymentMethod, SaleLine, SalePayload, SalePayment, SaleVoidPayload};
 pub use space::{
     Currency, FiscalizationMode, SpacePayload, SpaceSettings, WarehousePayload, WarehouseSeed,

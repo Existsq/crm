@@ -13,6 +13,7 @@ mod decide;
 mod fiscal;
 pub(crate) mod guards;
 mod parties;
+mod reminders;
 mod sales;
 mod space;
 mod staff;
@@ -25,9 +26,10 @@ use tracing::info;
 use uuid::Uuid;
 
 use buzz_core::kind::{
-    event_kind_u32, KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT,
-    KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE,
-    KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE, KIND_CRM_WAREHOUSE,
+    event_kind_u32, KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_CLIENT_TELEGRAM,
+    KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_REMINDER_SETTINGS,
+    KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
+    KIND_CRM_WAREHOUSE,
 };
 use buzz_core::tenant::TenantContext;
 
@@ -66,6 +68,12 @@ pub(crate) async fn ingest_crm_event(
         KIND_CRM_STAFF_SCHEDULE => Prepared::Schedule(staff::PreparedSchedule::parse(event)?),
         KIND_CRM_APPOINTMENT => {
             Prepared::Appointment(appointments::PreparedAppointment::parse(event)?)
+        }
+        KIND_CRM_REMINDER_SETTINGS => {
+            Prepared::ReminderSettings(reminders::PreparedReminderSettings::parse(event)?)
+        }
+        KIND_CRM_CLIENT_TELEGRAM => {
+            Prepared::ClientTelegram(reminders::PreparedClientTelegram::parse(event)?)
         }
         other => {
             return Err(IngestError::Rejected(format!(
@@ -142,6 +150,8 @@ enum Prepared {
     Staff(staff::PreparedStaff),
     Schedule(staff::PreparedSchedule),
     Appointment(appointments::PreparedAppointment),
+    ReminderSettings(reminders::PreparedReminderSettings),
+    ClientTelegram(reminders::PreparedClientTelegram),
 }
 
 impl Prepared {
@@ -163,6 +173,12 @@ impl Prepared {
             Prepared::Staff(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
             Prepared::Schedule(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
             Prepared::Appointment(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::ReminderSettings(prepared) => {
+                prepared.apply(tx, tenant, event, channel_id).await
+            }
+            Prepared::ClientTelegram(prepared) => {
+                prepared.apply(tx, tenant, event, channel_id).await
+            }
         }
     }
 }

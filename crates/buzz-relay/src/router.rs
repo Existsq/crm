@@ -122,6 +122,8 @@ const NIP_FI_EXEMPT_PREFIXES: &[&str] = &[
     "/api/join-policy",
     // Webhook trigger — secret-header auth; subtree for /hooks/{id}
     "/hooks/",
+    // CRM Telegram bot webhook — secret-header auth; exact path
+    "/crm/telegram/webhook",
     // Huddle audio WebSocket — WS-NIP-FI governs WebSocket; subtree
     "/huddle/",
     // Testbed-only mesh probe — no auth; subtree
@@ -351,6 +353,23 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             api::crm::appointments::SLOTS_PATH,
             get(api::crm::appointments::slots),
+        )
+        .route(
+            api::crm::reminders::REMINDERS_PATH,
+            get(api::crm::reminders::settings),
+        )
+        .route(
+            api::crm::reminders::DELIVERIES_PATH,
+            get(api::crm::reminders::deliveries),
+        )
+        .route(
+            api::crm::reminders::PARTY_TELEGRAM_PATH,
+            get(api::crm::reminders::party_telegram),
+        )
+        // NIP-FI: exempt (Telegram calls it; X-Telegram-Bot-Api-Secret-Token auth).
+        .route(
+            api::crm::reminders::TELEGRAM_WEBHOOK_PATH,
+            post(api::crm::reminders::telegram_webhook),
         )
         .route(
             api::crm::sales::ANALYTICS_PATH,
@@ -1744,6 +1763,11 @@ mod tests {
         // Webhook (prefix)
         assert!(is_exempt("/hooks/abc123"));
         assert!(!is_exempt("/hooksnot"), "/hooksnot must not match /hooks/");
+        assert!(is_exempt("/crm/telegram/webhook"));
+        assert!(
+            !is_exempt("/crm/reminders"),
+            "CRM reads stay NIP-FI protected"
+        );
 
         // Operator / admin subtrees
         assert!(is_exempt("/operator/communities"));

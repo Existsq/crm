@@ -733,6 +733,8 @@ pub struct AppState {
     /// Shared HTTP client for relay-proxied GIF provider requests. Reusing the
     /// connection pool avoids a fresh TLS handshake for every search/share.
     pub gif_http_client: reqwest::Client,
+    /// CRM visit reminder settings and Telegram transport.
+    pub crm_reminders: Arc<crate::crm_reminders::ReminderRuntime>,
     /// Shared Redis-backed admission limits for ordinary HTTP and WebSocket work.
     pub admission_rate_limiter: Arc<RedisRateLimiter>,
 
@@ -950,6 +952,7 @@ impl AppState {
             started_at: Instant::now(),
             nip98_replay,
             gif_http_client,
+            crm_reminders: Arc::new(crate::crm_reminders::ReminderRuntime::from_env()),
             admission_rate_limiter,
             observer_rate_limiter: Arc::new(DashMap::new()),
             media_upload_rate_limiter: Arc::new(DashMap::new()),

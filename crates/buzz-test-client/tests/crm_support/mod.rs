@@ -22,6 +22,8 @@ pub const KIND_CRM_CASH_SHIFT: u16 = 42121;
 pub const KIND_CRM_STAFF: u16 = 42131;
 pub const KIND_CRM_STAFF_SCHEDULE: u16 = 42132;
 pub const KIND_CRM_APPOINTMENT: u16 = 42133;
+pub const KIND_CRM_REMINDER_SETTINGS: u16 = 42150;
+pub const KIND_CRM_CLIENT_TELEGRAM: u16 = 42151;
 
 pub fn relay_url() -> String {
     std::env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:3000".to_string())
@@ -164,7 +166,10 @@ pub async fn cleanup_space(pool: &sqlx::PgPool, community: Uuid) {
         "DELETE FROM crm_sale_payments WHERE community_id = $1",
         "DELETE FROM crm_sale_lines WHERE community_id = $1",
         "DELETE FROM crm_sales WHERE community_id = $1",
+        "DELETE FROM crm_reminder_deliveries WHERE community_id = $1",
+        "DELETE FROM crm_reminder_settings WHERE community_id = $1",
         "DELETE FROM crm_appointments WHERE community_id = $1",
+        "DELETE FROM crm_client_telegram WHERE community_id = $1",
         "DELETE FROM crm_parties WHERE community_id = $1",
         "DELETE FROM crm_staff_days WHERE community_id = $1",
         "DELETE FROM crm_staff WHERE community_id = $1",

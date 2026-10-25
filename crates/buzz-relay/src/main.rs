@@ -857,6 +857,12 @@ async fn run_relay_main(boot: BootTracker) -> anyhow::Result<()> {
         info!("NIP-PL push disabled by BUZZ_PUSH_ENABLED");
     }
 
+    if state.crm_reminders.enabled {
+        tokio::spawn(buzz_relay::crm_reminders::run(Arc::clone(&state)));
+    } else {
+        info!("CRM reminder worker disabled by BUZZ_CRM_REMINDERS_ENABLED");
+    }
+
     // Admin outbox delivery worker — drives `relay_admin_outbox` rows.
     // Uses DB-level leases (held_by / lease_expires_at) so multiple pods can
     // run the worker concurrently without double-delivery.

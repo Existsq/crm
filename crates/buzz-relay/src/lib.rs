@@ -19,6 +19,9 @@ pub mod config;
 pub mod conformance;
 /// WebSocket connection lifecycle and state.
 pub mod connection;
+
+/// CRM visit reminders: worker, Telegram transport, invite codes.
+pub mod crm_reminders;
 /// Relay error types.
 pub mod error;
 /// WebSocket message handlers for NIP-01 client commands.

@@ -703,7 +703,7 @@ mod postgres_tests {
         let mut migrations: Vec<_> = MIGRATOR.iter().collect();
         migrations.sort_by_key(|migration| migration.version);
 
-        assert_eq!(migrations.len(), 56);
+        assert_eq!(migrations.len(), 57);
         assert_eq!(migrations[48].version, 49);
         assert!(migrations[48]
             .sql
@@ -744,6 +744,14 @@ mod postgres_tests {
             .sql
             .as_str()
             .contains("CREATE TABLE crm_appointments"));
+        let reminders = migrations
+            .iter()
+            .find(|migration| migration.version == 64)
+            .expect("migration 0064");
+        assert!(reminders
+            .sql
+            .as_str()
+            .contains("CREATE TABLE crm_reminder_deliveries"));
         assert_eq!(migrations[0].version, 1);
         assert_eq!(&*migrations[0].description, "initial schema");
         assert!(migrations[0]

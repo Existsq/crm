@@ -182,6 +182,59 @@ A client booked with one staff member. Authorized like posting documents.
   `staff` (default) or `online`.
 - A paid visit cannot be moved to another staff member, day or time.
 
+### `42150` — Reminder settings
+
+The space's visit reminder rules, replaced as a whole on every save. Authorized
+like space settings (owner/admin). The first save carries no
+`expected-revision`; later saves must.
+
+```json
+{
+  "kind": 42150,
+  "tags": [["h", "<space channel>"], ["expected-revision", "<event id>"]],
+  "content": "{\"v\":1,\"enabled\":true,\"rules\":[{\"trigger\":\"booked\",\"template\":\"{client}, вы записаны на {date} в {time}\"},{\"trigger\":\"before\",\"offset_min\":1440,\"template\":\"Завтра в {time} ждём вас\"}],\"salon_name\":\"Барбершоп\",\"address\":\"ул. Ленина, 1\"}"
+}
+```
+
+- Up to 4 rules with distinct keys: `booked` (right after booking) or `before`
+  with `offset_min` 30–10080 on a 15-minute grid.
+- Templates are 1–1000 characters. `{client}`, `{date}`, `{time}`,
+  `{services}`, `{staff}`, `{salon}`, `{address}` and `{total}` are replaced;
+  any other `{word}` is `invalid:`.
+
+### `42151` — Client Telegram link
+
+Where one customer gets reminders. Authorized like editing customers.
+
+```json
+{
+  "kind": 42151,
+  "tags": [["h", "<space channel>"]],
+  "content": "{\"v\":1,\"customer_id\":\"<party uuid>\",\"chat_id\":123456789,\"opted_out\":false}"
+}
+```
+
+- No `chat_id` unlinks the customer; `opted_out` stops reminders while keeping
+  the chat. Clients normally link themselves through the bot (below); a
+  staff-set `chat_id` is for testing and support.
+
+### Reminder delivery
+
+The relay plans one delivery per (visit, rule, visit time) when the rule
+comes due for a `booked` or `confirmed` visit, and sends it through the
+configured Telegram bot, or records it without sending when no bot is
+configured (`transport: "sandbox"`). A `before` rule fires only for visits
+booked before it came due; a rule more than an hour overdue (relay downtime)
+is skipped. Just before sending, the relay re-reads the visit: a cancelled or
+moved visit cancels the message (a moved visit gets a fresh one for the new
+time). Transient failures retry with backoff, up to 5 attempts; a client who
+blocked the bot is opted out.
+
+The bot's webhook is `POST /crm/telegram/webhook` on the community's host,
+authenticated by Telegram's `X-Telegram-Bot-Api-Secret-Token`. `/start
+<code>` links the customer the code names (codes are HMAC-bound to the
+community and bot), `/stop` opts the chat out and `/resume` back in.
+
 ## Relay responses
 
 | Situation | `OK` message | HTTP bridge |
@@ -233,6 +286,21 @@ with interval bounds in minutes after midnight. `GET /crm/products` takes
 "starts": ["HH:MM"]}]}`: the free start times of every active staff member who
 performs all the services. Past days have no slots; today's start after the
 current time in the space timezone.
+
+`GET /crm/reminders` returns `{"settings", "enabled", "revision",
+"updated_at", "transport": {"mode": "telegram" | "sandbox", "bot_username",
+"worker"}, "placeholders"}` (`settings` is `null` before the first save).
+`GET /crm/reminders/deliveries[?since=<RFC 3339>][&appointment_id][&customer_id][&limit=200]`
+returns `{"deliveries": [{"id", "appointment_id", "rule_key", "customer_id",
+"client_name", "chat_id", "text", "status", "reason", "transport",
+"attempts", "last_error", "due_at", "visit_at", "created_at", "sent_at"}]}`,
+newest first; `status` is `pending`, `sent`, `failed`, `skipped` or
+`cancelled`, and `reason` one of `no_telegram`, `opted_out`, `visit_changed`,
+`visit_passed`, `disabled`, `blocked`, `error`. `GET
+/crm/parties/{id}/telegram` returns `{"customer_id", "linked", "chat_id",
+"username", "opted_out", "linked_via", "linked_at", "invite_url",
+"start_code"}`; `invite_url` is `https://t.me/<bot>?start=<code>` when a bot
+username is configured.
 
 Unauthenticated requests get 401; when relay membership is required, callers
 who are not relay members get 403 `relay_membership_required`.

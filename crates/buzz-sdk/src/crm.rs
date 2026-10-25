@@ -5,14 +5,16 @@
 //! for shape reasons. Authorization and CAS checks still happen at the relay.
 
 use buzz_core::kind::{
-    KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY,
-    KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF,
-    KIND_CRM_STAFF_SCHEDULE, KIND_CRM_WAREHOUSE,
+    KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_CLIENT_TELEGRAM, KIND_CRM_FISCAL_RECEIPT,
+    KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_REMINDER_SETTINGS, KIND_CRM_SALE,
+    KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
+    KIND_CRM_WAREHOUSE,
 };
 use buzz_crm::{
-    space::PAYLOAD_VERSION, tags, AppointmentPayload, CashShiftPayload, FiscalReceiptPayload,
-    PartyPayload, ProductPayload, SalePayload, SaleVoidPayload, SchedulePayload, SpacePayload,
-    SpaceSettings, StaffPayload, WarehousePayload, WarehouseSeed,
+    space::PAYLOAD_VERSION, tags, AppointmentPayload, CashShiftPayload, ClientTelegramPayload,
+    FiscalReceiptPayload, PartyPayload, ProductPayload, ReminderSettingsPayload, SalePayload,
+    SaleVoidPayload, SchedulePayload, SpacePayload, SpaceSettings, StaffPayload, WarehousePayload,
+    WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -299,6 +301,45 @@ pub fn build_crm_appointment(
         event_tags.push(revision_tag(revision)?);
     }
     Ok(EventBuilder::new(Kind::Custom(KIND_CRM_APPOINTMENT as u16), content).tags(event_tags))
+}
+
+/// Build the kind 42150 event that saves the space's reminder rules.
+/// `expected_revision` is `None` for the first save.
+pub fn build_crm_reminder_settings(
+    channel_id: Uuid,
+    mut payload: ReminderSettingsPayload,
+    expected_revision: Option<&str>,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = ReminderSettingsPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let mut event_tags = vec![tag(&["h", &channel_id.to_string()])?];
+    if let Some(revision) = expected_revision {
+        event_tags.push(revision_tag(revision)?);
+    }
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_REMINDER_SETTINGS as u16), content)
+            .tags(event_tags),
+    )
+}
+
+/// Build the kind 42151 event that links, unlinks or opts out a customer's
+/// Telegram reminders.
+pub fn build_crm_client_telegram(
+    channel_id: Uuid,
+    mut payload: ClientTelegramPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = ClientTelegramPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_CLIENT_TELEGRAM as u16), content)
+            .tags(vec![tag(&["h", &channel_id.to_string()])?]),
+    )
 }
 
 #[cfg(test)]
@@ -609,5 +650,45 @@ mod tests {
         assert_eq!(parsed.v, 1);
         assert_eq!(parsed.client_name.as_deref(), Some("Анна"));
         assert!(event.content.contains("\"start\":\"10:00\""));
+    }
+
+    #[test]
+    fn reminder_builders_validate_and_tag() {
+        let channel = Uuid::new_v4();
+        let settings = |template: &str| ReminderSettingsPayload {
+            v: 0,
+            enabled: true,
+            rules: vec![buzz_crm::ReminderRule {
+                trigger: buzz_crm::ReminderTrigger::Before,
+                offset_min: Some(1440),
+                template: template.into(),
+            }],
+            salon_name: None,
+            address: None,
+        };
+        assert!(build_crm_reminder_settings(channel, settings("{oops}"), None).is_err());
+        let revision = "cd".repeat(32);
+        let event =
+            build_crm_reminder_settings(channel, settings(" Завтра в {time} "), Some(&revision))
+                .unwrap()
+                .sign_with_keys(&Keys::generate())
+                .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_REMINDER_SETTINGS);
+        assert_eq!(tag_values(&event, "expected-revision"), vec![revision]);
+        let parsed = ReminderSettingsPayload::parse(&event.content).unwrap();
+        assert_eq!(parsed.rules[0].template, "Завтра в {time}");
+
+        let link = ClientTelegramPayload {
+            v: 0,
+            customer_id: Uuid::new_v4(),
+            chat_id: Some(42),
+            opted_out: false,
+        };
+        let event = build_crm_client_telegram(channel, link)
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_CLIENT_TELEGRAM);
+        assert_eq!(tag_values(&event, "h"), vec![channel.to_string()]);
     }
 }
