@@ -223,6 +223,7 @@ pub fn run() {
         })
         .manage(build_app_state())
         .manage(ClipboardState::new())
+        .manage(commands::CashDeskState::default())
         .manage(PendingCommunityDeepLinks::default())
         .manage(PendingNavigationDeepLinks::default())
         .manage(PendingEntityDeepLinks::default())
@@ -793,6 +794,17 @@ pub fn run() {
             crm_post_sale,
             crm_void_sale,
             crm_get_analytics,
+            crm_list_shifts,
+            cash_get_settings,
+            cash_set_settings,
+            cash_device_status,
+            cash_open_shift,
+            cash_close_shift,
+            cash_report_x,
+            cash_fiscalize_sale,
+            cash_queue,
+            cash_process_queue,
+            cash_resolve_job,
             get_channel_workflows,
             get_channels_workflows,
             get_workflow,
