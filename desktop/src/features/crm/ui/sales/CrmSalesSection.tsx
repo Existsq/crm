@@ -115,6 +115,7 @@ function SalesTable({
 export function CrmSalesSection({ space }: { space: CrmMemberSpace }) {
   const canPost = space.capabilities.has("post_documents");
   const canVoid = space.capabilities.has("void_documents");
+  const canFiscalize = space.capabilities.has("record_fiscal");
   const [hideVoided, setHideVoided] = React.useState(false);
   const query = useCrmSalesQuery({ customerId: null, voided: !hideVoided });
   const post = usePostCrmSaleMutation();
@@ -286,6 +287,7 @@ export function CrmSalesSection({ space }: { space: CrmMemberSpace }) {
       ) : null}
 
       <CrmSaleDetailsDialog
+        canFiscalize={canFiscalize}
         canVoid={canVoid}
         channelId={space.channelId}
         key={details.saleId ?? "none"}

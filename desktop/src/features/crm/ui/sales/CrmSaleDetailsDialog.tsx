@@ -10,6 +10,7 @@ import {
   formatCrmDateTime,
 } from "@/features/crm/ui/CrmField";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
+import { CrmSaleFiscal } from "@/features/crm/ui/sales/CrmSaleFiscal";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -24,6 +25,7 @@ import { Skeleton } from "@/shared/ui/skeleton";
 
 /** One sale with its lines; owners and admins can void it from here. */
 export function CrmSaleDetailsDialog({
+  canFiscalize,
   canVoid,
   channelId,
   onCloseAutoFocus,
@@ -31,6 +33,7 @@ export function CrmSaleDetailsDialog({
   open,
   saleId,
 }: {
+  canFiscalize: boolean;
   canVoid: boolean;
   channelId: string;
   onCloseAutoFocus: (event: Event) => void;
@@ -209,6 +212,11 @@ export function CrmSaleDetailsDialog({
                   </tfoot>
                 </table>
               </div>
+              <CrmSaleFiscal
+                canFiscalize={canFiscalize}
+                channelId={channelId}
+                sale={sale}
+              />
               {sale.note ? (
                 <p className="text-sm">
                   <span className="text-muted-foreground">

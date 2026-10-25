@@ -220,8 +220,7 @@ pub async fn crm_void_sale(
 ) -> Result<CrmWriteWire, String> {
     let channel = parse_uuid(&channel_id, "channel id")?;
     let sale = parse_uuid(&sale_id, "sale id")?;
-    let builder =
-        buzz_sdk_pkg::build_crm_sale_void(channel, sale, &reason).map_err(sdk_error)?;
+    let builder = buzz_sdk_pkg::build_crm_sale_void(channel, sale, &reason).map_err(sdk_error)?;
     let result = submit_event(builder, &state).await?;
     Ok(CrmWriteWire {
         event_id: result.event_id,
@@ -325,7 +324,10 @@ mod tests {
         assert_eq!(content["type"], "customer");
 
         let (builder, _) = party_builder(input(Some("ab".repeat(32)))).unwrap();
-        assert_eq!(tag(&sign(builder), "expected-revision"), Some("ab".repeat(32)));
+        assert_eq!(
+            tag(&sign(builder), "expected-revision"),
+            Some("ab".repeat(32))
+        );
         let mut bad = input(None);
         bad.inn = Some("123".into());
         assert!(party_builder(bad).unwrap_err().starts_with("invalid:"));
@@ -350,13 +352,18 @@ mod tests {
         assert_eq!(event.kind.as_u16(), 42104);
         let content: Value = serde_json::from_str(&event.content).unwrap();
         assert!(content.get("customer_id").is_none());
-        assert!(sale_builder(input(0, None)).unwrap_err().starts_with("invalid:"));
+        assert!(sale_builder(input(0, None))
+            .unwrap_err()
+            .starts_with("invalid:"));
         assert!(sale_builder(input(1000, Some("nope"))).is_err());
     }
 
     #[test]
     fn paths_encode_only_present_filters() {
-        assert_eq!(parties_path(None, Some(""), false, None, None), "/crm/parties");
+        assert_eq!(
+            parties_path(None, Some(""), false, None, None),
+            "/crm/parties"
+        );
         assert_eq!(
             parties_path(Some(" Мария "), Some("customers"), true, Some(500), Some("c")),
             "/crm/parties?q=%D0%9C%D0%B0%D1%80%D0%B8%D1%8F&role=customers&archived=true&limit=200&after=c"

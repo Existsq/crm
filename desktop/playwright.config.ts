@@ -94,6 +94,7 @@ export default defineConfig({
         "**/crm-products.spec.ts",
         "**/crm-products-screenshots.spec.ts",
         "**/crm-sales.spec.ts",
+        "**/crm-cash.spec.ts",
         "**/workflow-reaction-picker.spec.ts",
         "**/workflow-local-controls.spec.ts",
         "**/workflow-title-stability.spec.ts",

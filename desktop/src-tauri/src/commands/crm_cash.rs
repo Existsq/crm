@@ -6,6 +6,7 @@
 //! `buzz-atol` outbox in the app data dir, so a crash, a lost connection or a
 //! double click never prints a receipt twice.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -16,9 +17,9 @@ use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use buzz_atol_pkg::{
-    process, receipt_payload, wire::parse_fiscal_params, wire::parse_shift_status, AtolClient,
-    Job, JobState, Operator, Outbox, ReceiptInput, ReceiptLine, ReceiptPayment, RecordOutcome,
-    Task, TaskState, DEFAULT_BASE_URL,
+    process, receipt_payload, wire::parse_fiscal_params, wire::parse_shift_status, AtolClient, Job,
+    JobState, Operator, Outbox, ReceiptInput, ReceiptLine, ReceiptPayment, RecordOutcome, Task,
+    TaskState, DEFAULT_BASE_URL,
 };
 use buzz_crm_pkg::{
     CashShiftPayload, FiscalParams, PaymentMethod, PaymentObject, ShiftAction, Unit, VatRate,
@@ -308,13 +309,37 @@ async fn receipt_for_sale(
     is_return: bool,
 ) -> Result<(ReceiptInput, i64), String> {
     let sale: Value = get_relay_json(state, &format!("/crm/sales/{sale_id}")).await?;
+    let mut products = HashMap::new();
+    for line in sale["lines"].as_array().ok_or("sale has no lines")? {
+        let product_id = line["product_id"].as_str().ok_or("line has no product")?;
+        if !products.contains_key(product_id) {
+            let product: Value =
+                get_relay_json(state, &format!("/crm/products/{product_id}")).await?;
+            products.insert(product_id.to_string(), product);
+        }
+    }
+    receipt_from_sale(&sale, &products, is_return)
+}
+
+/// The receipt for `sale` (`GET /crm/sales/{id}`), with each line's
+/// payment object (тег 1212) taken from its product.
+fn receipt_from_sale(
+    sale: &Value,
+    products: &HashMap<String, Value>,
+    is_return: bool,
+) -> Result<(ReceiptInput, i64), String> {
     let total = sale["total_minor"].as_i64().ok_or("sale has no total")?;
     let mut lines = Vec::new();
     for line in sale["lines"].as_array().ok_or("sale has no lines")? {
         let product_id = line["product_id"].as_str().ok_or("line has no product")?;
-        let product: Value = get_relay_json(state, &format!("/crm/products/{product_id}")).await?;
+        let product = products
+            .get(product_id)
+            .ok_or_else(|| format!("product {product_id} was not read"))?;
         lines.push(ReceiptLine {
-            name: line["product_name"].as_str().unwrap_or_default().to_string(),
+            name: line["product_name"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
             price_minor: line["price_minor"].as_i64().unwrap_or_default(),
             qty_milli: line["qty_milli"].as_i64().unwrap_or_default(),
             amount_minor: line["amount_minor"].as_i64().unwrap_or_default(),
@@ -445,8 +470,11 @@ pub async fn cash_fiscalize_sale(
 
 /// The receipt queue.
 #[tauri::command]
-pub fn cash_queue(app: AppHandle, desk: State<'_, CashDeskState>) -> Result<Vec<CashJobWire>, String> {
-    list(&outbox(&app, &desk)?)
+pub fn cash_queue(
+    app: AppHandle,
+    desk: State<'_, CashDeskState>,
+) -> Result<Vec<CashJobWire>, String> {
+    list(&*outbox(&app, &desk)?)
 }
 
 /// Advance every pending or printed receipt (on app start, a timer, or the
@@ -517,5 +545,71 @@ mod tests {
             "ККМ отказала (69): Смена не открыта"
         );
         assert!(device_error(TaskState::Unknown).contains("потеряла"));
+    }
+
+    fn sale_json() -> Value {
+        serde_json::json!({
+            "number": 7,
+            "total_minor": 47_975,
+            "cash_tendered_minor": 50_000,
+            "payments": [
+                {"method": "cash", "amount_minor": 27_975},
+                {"method": "card", "amount_minor": 20_000}
+            ],
+            "lines": [
+                {"product_id": "k", "product_name": "Кефир", "unit": "piece",
+                 "vat": "vat22", "qty_milli": 2000, "price_minor": 8990,
+                 "discount_minor": 0, "amount_minor": 17_980},
+                {"product_id": "c", "product_name": "Сыр", "unit": "kilogram",
+                 "vat": "vat10", "qty_milli": 500, "price_minor": 59_990,
+                 "discount_minor": 0, "amount_minor": 29_995}
+            ]
+        })
+    }
+
+    fn products() -> HashMap<String, Value> {
+        HashMap::from([
+            (
+                "k".to_string(),
+                serde_json::json!({"payment_object": "commodity"}),
+            ),
+            (
+                "c".to_string(),
+                serde_json::json!({"payment_object": "commodity"}),
+            ),
+        ])
+    }
+
+    #[test]
+    fn a_sale_receipt_prints_the_cash_handed_over() {
+        let (receipt, number) = receipt_from_sale(&sale_json(), &products(), false).unwrap();
+        assert_eq!(number, 7);
+        assert_eq!(receipt.total_minor, 47_975);
+        assert_eq!(receipt.lines.len(), 2);
+        assert_eq!(receipt.lines[1].vat, VatRate::Vat10);
+        let cash = &receipt.payments[0];
+        assert_eq!(
+            (cash.method, cash.amount_minor),
+            (PaymentMethod::Cash, 50_000)
+        );
+        let card = &receipt.payments[1];
+        assert_eq!(
+            (card.method, card.amount_minor),
+            (PaymentMethod::Card, 20_000)
+        );
+    }
+
+    #[test]
+    fn a_return_receipt_pays_back_exactly_the_cash_part() {
+        let (receipt, _) = receipt_from_sale(&sale_json(), &products(), true).unwrap();
+        assert!(receipt.is_return);
+        assert_eq!(receipt.payments[0].amount_minor, 27_975);
+    }
+
+    #[test]
+    fn a_line_without_its_product_is_an_error_not_a_guess() {
+        let mut products = products();
+        products.remove("c");
+        assert!(receipt_from_sale(&sale_json(), &products, false).is_err());
     }
 }

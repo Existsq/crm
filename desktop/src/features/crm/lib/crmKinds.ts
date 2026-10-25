@@ -11,6 +11,8 @@ export const KIND_CRM_PRODUCT = 42102;
 export const KIND_CRM_PARTY = 42103;
 export const KIND_CRM_SALE = 42104;
 export const KIND_CRM_SALE_VOID = 42105;
+export const KIND_CRM_FISCAL_RECEIPT = 42120;
+export const KIND_CRM_CASH_SHIFT = 42121;
 
 /** Every CRM kind the desktop subscribes to for live refresh. */
 export const CRM_KINDS: readonly number[] = [
@@ -20,4 +22,6 @@ export const CRM_KINDS: readonly number[] = [
   KIND_CRM_PARTY,
   KIND_CRM_SALE,
   KIND_CRM_SALE_VOID,
+  KIND_CRM_FISCAL_RECEIPT,
+  KIND_CRM_CASH_SHIFT,
 ];

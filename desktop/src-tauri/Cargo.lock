@@ -1096,6 +1096,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "buzz-atol"
+version = "0.1.0"
+dependencies = [
+ "buzz-crm",
+ "reqwest 0.13.4",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "buzz-core"
 version = "0.1.0"
 dependencies = [
@@ -1138,6 +1152,7 @@ dependencies = [
  "base64 0.22.1",
  "block2",
  "buzz-agent",
+ "buzz-atol",
  "buzz-core",
  "buzz-crm",
  "buzz-media",

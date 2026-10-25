@@ -128,13 +128,21 @@ export type CrmSaleLineInput = {
   discountMinor: number;
 };
 
+/** One part of a split payment, kopecks. */
+export type CrmSalePayment = { method: CrmPaymentMethod; amountMinor: number };
+
 export type CrmSaleInput = {
   channelId: string;
   /** Picked once per sale dialog so a retried submit cannot sell twice. */
   saleId: string;
   warehouseId: string;
   customerId: string | null;
+  /** The primary method; with `payments`, one of their methods. */
   payment: CrmPaymentMethod;
+  /** Split payment summing to the total; omitted pays it all with `payment`. */
+  payments?: CrmSalePayment[];
+  /** Cash handed over, at least the cash part (only with cash). */
+  cashTenderedMinor?: number | null;
   lines: CrmSaleLineInput[];
   note: string | null;
 };
@@ -156,6 +164,17 @@ export type CrmSaleVoid = {
   voidedBy: string;
 };
 
+/** What the ККМ printed for one receipt. */
+export type CrmFiscalRecord = {
+  documentNumber: number;
+  documentSign: string;
+  receiptNumber: number;
+  shiftNumber: number;
+  fnNumber: string;
+  documentDatetime: string;
+  totalMinor: number;
+};
+
 export type CrmSale = {
   id: string;
   number: number;
@@ -171,6 +190,11 @@ export type CrmSale = {
   soldAt: string;
   createdBy: string;
   void: CrmSaleVoid | null;
+  /** Payment parts, largest first. */
+  payments: CrmSalePayment[];
+  cashTenderedMinor: number | null;
+  /** Receipts printed for the sale and, after a void, its return. */
+  fiscal: { sell: CrmFiscalRecord | null; sellReturn: CrmFiscalRecord | null };
   /** Present on `getCrmSale` only. */
   lines: CrmSaleLine[] | null;
 };
@@ -184,6 +208,30 @@ export type CrmSaleListFilter = {
   limit?: number;
   before?: number | null;
 };
+
+type RawFiscalRecord = {
+  document_number: number;
+  document_sign: string;
+  receipt_number: number;
+  shift_number: number;
+  fn_number: string;
+  document_datetime: string;
+  total_minor: number;
+};
+
+function fromRawFiscal(raw: RawFiscalRecord | null | undefined) {
+  return raw
+    ? {
+        documentNumber: raw.document_number,
+        documentSign: raw.document_sign,
+        receiptNumber: raw.receipt_number,
+        shiftNumber: raw.shift_number,
+        fnNumber: raw.fn_number,
+        documentDatetime: raw.document_datetime,
+        totalMinor: raw.total_minor,
+      }
+    : null;
+}
 
 type RawCrmSale = {
   id: string;
@@ -200,6 +248,12 @@ type RawCrmSale = {
   sold_at: string;
   created_by: string;
   void: { voided_at: string; reason: string; voided_by: string } | null;
+  payments?: { method: CrmPaymentMethod; amount_minor: number }[];
+  cash_tendered_minor?: number | null;
+  fiscal?: {
+    sell?: RawFiscalRecord | null;
+    sell_return?: RawFiscalRecord | null;
+  };
   lines?: {
     product_id: string;
     product_name: string;
@@ -234,6 +288,15 @@ export function fromRawCrmSale(raw: RawCrmSale): CrmSale {
           voidedBy: raw.void.voided_by,
         }
       : null,
+    payments: (raw.payments ?? []).map((part) => ({
+      method: part.method,
+      amountMinor: part.amount_minor,
+    })),
+    cashTenderedMinor: raw.cash_tendered_minor ?? null,
+    fiscal: {
+      sell: fromRawFiscal(raw.fiscal?.sell),
+      sellReturn: fromRawFiscal(raw.fiscal?.sell_return),
+    },
     lines: raw.lines
       ? raw.lines.map((line) => ({
           productId: line.product_id,
@@ -256,6 +319,11 @@ export function toRawCrmSale(input: CrmSaleInput) {
     warehouse_id: input.warehouseId,
     customer_id: input.customerId,
     payment: input.payment,
+    payments: (input.payments ?? []).map((part) => ({
+      method: part.method,
+      amount_minor: part.amountMinor,
+    })),
+    cash_tendered_minor: input.cashTenderedMinor ?? null,
     lines: input.lines.map((line) => ({
       product_id: line.productId,
       qty_milli: line.qtyMilli,

@@ -72,7 +72,22 @@ type MockSale = {
   note: string | null;
   sold_at: string;
   void: { voided_at: string; reason: string; voided_by: string } | null;
+  payments: Array<{ method: MockSale["payment"]; amount_minor: number }>;
+  cash_tendered_minor: number | null;
+  fiscal: { sell?: MockFiscalRecord; sell_return?: MockFiscalRecord };
   lines: MockLine[];
+};
+
+/** What the mock ККМ printed for one receipt (`CrmFiscalRecord`). */
+export type MockFiscalRecord = {
+  document_number: number;
+  document_sign: string;
+  receipt_number: number;
+  shift_number: number;
+  fn_number: string;
+  registration_number: string | null;
+  document_datetime: string;
+  total_minor: number;
 };
 
 let parties: MockParty[] = [];
@@ -136,6 +151,14 @@ export function seedMockCrmSales(
       note: null,
       sold_at: seed.soldAt ?? now,
       void: null,
+      payments: [
+        {
+          method: seed.payment ?? "cash",
+          amount_minor: lines.reduce((sum, line) => sum + line.amount_minor, 0),
+        },
+      ],
+      cash_tendered_minor: null,
+      fiscal: {},
       lines,
     });
   }
@@ -271,6 +294,8 @@ function postSale(
       warehouse_id: string;
       customer_id: string | null;
       payment: MockSale["payment"];
+      payments?: Array<{ method: MockSale["payment"]; amount_minor: number }>;
+      cash_tendered_minor?: number | null;
       lines: Array<{
         product_id: string;
         qty_milli: number;
@@ -316,17 +341,33 @@ function postSale(
         lineAmount(line.price_minor, line.qty_milli) - line.discount_minor,
     };
   });
+  const total = lines.reduce((sum, line) => sum + line.amount_minor, 0);
+  const payments =
+    input.payments && input.payments.length > 0
+      ? input.payments
+      : [{ method: input.payment, amount_minor: total }];
+  if (payments.reduce((sum, part) => sum + part.amount_minor, 0) !== total) {
+    throw "relay error 400: invalid: payments: parts do not sum to the sale total";
+  }
+  const cash = payments.find((part) => part.method === "cash")?.amount_minor;
+  const tendered = input.cash_tendered_minor ?? null;
+  if (tendered !== null && (cash === undefined || tendered < cash)) {
+    throw "relay error 400: invalid: cash_tendered_minor: is less than the cash part of the payment";
+  }
   sales.push({
     id: input.sale_id,
     number: sales.length + 1,
     warehouse_id: input.warehouse_id,
     customer_id: input.customer_id,
     payment: input.payment,
-    total_minor: lines.reduce((sum, line) => sum + line.amount_minor, 0),
+    total_minor: total,
     discount_minor: lines.reduce((sum, line) => sum + line.discount_minor, 0),
     note: input.note,
     sold_at: new Date().toISOString(),
     void: null,
+    payments: [...payments].sort((a, b) => b.amount_minor - a.amount_minor),
+    cash_tendered_minor: tendered,
+    fiscal: {},
     lines,
   });
   return { event_id: eventId(), entity_id: input.sale_id };
@@ -444,6 +485,25 @@ function analytics(
       anonymous_revenue_minor: revenue - identified,
     },
   };
+}
+
+/** A mock sale as the cash-desk mock reads it. */
+export function mockCrmSaleById(saleId: string): MockSale | undefined {
+  return sales.find((sale) => sale.id === saleId);
+}
+
+/** Record a printed receipt on a sale, as kind 42120 does at the relay. */
+export function recordMockCrmReceipt(
+  saleId: string,
+  operation: "sell" | "sell_return",
+  record: MockFiscalRecord,
+): void {
+  const sale = sales.find((row) => row.id === saleId);
+  if (!sale) throw "relay error 409: conflict: sale does not exist";
+  if (sale.fiscal[operation]) {
+    throw "relay error 409: conflict: receipt already recorded for the sale";
+  }
+  sale.fiscal[operation] = record;
 }
 
 /** Handle a customer/sale/analytics command, or `undefined` otherwise. */
