@@ -1,4 +1,4 @@
-import { Package, Plus, Search } from "lucide-react";
+import { Package, Plus, Scissors, Search } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -15,6 +15,7 @@ import type { CrmMemberSpace } from "@/shared/api/tauriCrm";
 import type {
   CrmProduct,
   CrmProductFields,
+  CrmProductKind,
 } from "@/shared/api/tauriCrmProducts";
 import { Button } from "@/shared/ui/button";
 import { EmptyState } from "@/shared/ui/empty-state";
@@ -36,12 +37,35 @@ type DialogState = {
   productId: string;
 };
 
-export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
+/** Copy and test ids of the two catalog screens. */
+function sectionCopy(kind: CrmProductKind) {
+  return kind === "goods"
+    ? { ...ru.products, id: "crm-products", addId: "crm-product-add" }
+    : {
+        ...ru.products,
+        ...ru.services,
+        id: "crm-services",
+        addId: "crm-service-add",
+      };
+}
+
+/**
+ * The catalog screen: goods (stock, barcodes) or services (duration). Both
+ * are kind 42102 products; the relay splits them by payment object.
+ */
+export function CrmProductsSection({
+  kind = "goods",
+  space,
+}: {
+  kind?: CrmProductKind;
+  space: CrmMemberSpace;
+}) {
+  const copy = sectionCopy(kind);
   const canEdit = space.capabilities.has("edit_catalog");
   const [search, setSearch] = React.useState("");
   const [showArchived, setShowArchived] = React.useState(false);
   const q = useDebouncedValue(search.trim(), SEARCH_DEBOUNCE_MS);
-  const query = useCrmProductsQuery({ q, archived: showArchived });
+  const query = useCrmProductsQuery({ q, archived: showArchived, kind });
   const write = useWriteCrmProductMutation();
   const [dialog, setDialog] = React.useState<DialogState>({
     open: false,
@@ -85,7 +109,7 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
         productId: dialog.productId,
         expectedRevision,
       });
-      toast.success(dialogProduct ? ru.products.updated : ru.products.created);
+      toast.success(dialogProduct ? copy.updated : copy.created);
       setDialog((current) => ({ ...current, open: false }));
     } catch {
       // Rendered in the dialog through the mutation error state.
@@ -96,32 +120,32 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
 
   return (
     <section
-      aria-labelledby="crm-products-title"
+      aria-labelledby={`${copy.id}-title`}
       className="space-y-4"
-      data-testid="crm-products"
+      data-testid={copy.id}
     >
       <SectionHeader
         action={
           canEdit ? (
             <Button
-              data-testid="crm-product-add"
+              data-testid={copy.addId}
               onClick={(event) => openDialog(null, event.currentTarget)}
               ref={addButtonRef}
               size="sm"
             >
               <Plus aria-hidden="true" className="h-4 w-4" />
-              {ru.products.add}
+              {copy.add}
             </Button>
           ) : undefined
         }
-        description={canEdit ? undefined : ru.products.readOnlyHint}
-        title={<span id="crm-products-title">{ru.products.title}</span>}
+        description={canEdit ? undefined : copy.readOnlyHint}
+        title={<span id={`${copy.id}-title`}>{copy.title}</span>}
       />
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="relative min-w-[14rem] flex-1">
-          <label className="sr-only" htmlFor="crm-products-search">
-            {ru.products.searchLabel}
+          <label className="sr-only" htmlFor={`${copy.id}-search`}>
+            {copy.searchLabel}
           </label>
           <Search
             aria-hidden="true"
@@ -131,10 +155,10 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
             autoCapitalize="none"
             autoCorrect="off"
             className="h-9 w-full rounded-lg border border-border/70 bg-background pl-9 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-            data-testid="crm-products-search"
-            id="crm-products-search"
+            data-testid={`${copy.id}-search`}
+            id={`${copy.id}-search`}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={ru.products.searchPlaceholder}
+            placeholder={copy.searchPlaceholder}
             spellCheck={false}
             type="search"
             value={search}
@@ -143,12 +167,12 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
         <div className="flex items-center gap-2">
           <Switch
             checked={showArchived}
-            data-testid="crm-products-show-archived"
-            id="crm-products-show-archived"
+            data-testid={`${copy.id}-show-archived`}
+            id={`${copy.id}-show-archived`}
             onCheckedChange={setShowArchived}
           />
-          <label className="text-sm" htmlFor="crm-products-show-archived">
-            {ru.products.showArchived}
+          <label className="text-sm" htmlFor={`${copy.id}-show-archived`}>
+            {copy.showArchived}
           </label>
         </div>
       </div>
@@ -156,9 +180,9 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
       {query.isPending ? (
         <div
           aria-busy="true"
-          aria-label={ru.products.loading}
+          aria-label={copy.loading}
           className="space-y-2"
-          data-testid="crm-products-loading"
+          data-testid={`${copy.id}-loading`}
           role="status"
         >
           <Skeleton className="h-10 w-full" />
@@ -176,21 +200,27 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
               {ru.common.retry}
             </Button>
           }
-          testId="crm-products-error"
-          title={ru.products.loadError}
+          testId={`${copy.id}-error`}
+          title={copy.loadError}
         />
       ) : products.length === 0 ? (
         <EmptyState
           description={
             filtered
-              ? ru.products.noResultsHint
+              ? copy.noResultsHint
               : canEdit
-                ? ru.products.emptyCanEdit
-                : ru.products.emptyReadOnly
+                ? copy.emptyCanEdit
+                : copy.emptyReadOnly
           }
-          icon={<Package className="h-10 w-10" />}
-          testId="crm-products-empty"
-          title={filtered ? ru.products.noResultsTitle : ru.products.emptyTitle}
+          icon={
+            kind === "services" ? (
+              <Scissors className="h-10 w-10" />
+            ) : (
+              <Package className="h-10 w-10" />
+            )
+          }
+          testId={`${copy.id}-empty`}
+          title={filtered ? copy.noResultsTitle : copy.emptyTitle}
         />
       ) : (
         <>
@@ -198,6 +228,7 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
           <CrmProductsTable
             busy={query.isPlaceholderData}
             canEdit={canEdit}
+            kind={kind}
             onEdit={openDialog}
             products={products}
           />
@@ -207,7 +238,7 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
       {query.hasNextPage && !query.isPlaceholderData ? (
         <div className="flex justify-center">
           <Button
-            data-testid="crm-products-load-more"
+            data-testid={`${copy.id}-load-more`}
             disabled={query.isFetchingNextPage}
             onClick={() => void query.fetchNextPage()}
             size="sm"
@@ -222,7 +253,7 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
 
       {!dialog.open ? (
         // A save that fails after its dialog was closed still reports here.
-        <CrmErrorAlert error={write.error} testId="crm-products-write-error" />
+        <CrmErrorAlert error={write.error} testId={`${copy.id}-write-error`} />
       ) : null}
 
       {canEdit ? (
@@ -230,6 +261,7 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
           defaultVat={space.settings.defaultVat}
           error={write.error}
           key={dialog.session}
+          kind={kind}
           onCloseAutoFocus={(event) => {
             // Back to the button that opened the dialog, or to "Add" when
             // that row is gone (archived, filtered out).

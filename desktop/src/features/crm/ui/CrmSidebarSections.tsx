@@ -1,9 +1,12 @@
 import { useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
+  CalendarDays,
+  Contact,
   type LucideIcon,
   Package,
   ReceiptText,
+  Scissors,
   Settings,
   ShoppingCart,
   Users,
@@ -23,6 +26,9 @@ import {
 
 const SECTION_ICONS: Record<CrmSectionId, LucideIcon> = {
   products: Package,
+  services: Scissors,
+  staff: Contact,
+  schedule: CalendarDays,
   parties: Users,
   cash: ShoppingCart,
   sales: ReceiptText,

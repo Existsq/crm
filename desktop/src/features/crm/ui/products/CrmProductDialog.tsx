@@ -4,6 +4,7 @@ import { ru } from "@/features/crm/i18n/ru";
 import { describeCrmError } from "@/features/crm/lib/crmErrors";
 import {
   emptyProductDraft,
+  emptyServiceDraft,
   PRODUCT_DRAFT_FIELDS,
   type ProductDraft,
   productDraftFrom,
@@ -19,6 +20,7 @@ import type { CrmVatRate } from "@/shared/api/tauriCrm";
 import type {
   CrmProduct,
   CrmProductFields,
+  CrmProductKind,
 } from "@/shared/api/tauriCrmProducts";
 import { Button } from "@/shared/ui/button";
 import {
@@ -36,6 +38,7 @@ import {
 export function CrmProductDialog({
   defaultVat,
   error,
+  kind,
   onCloseAutoFocus,
   onDismissError,
   onOpenChange,
@@ -46,6 +49,8 @@ export function CrmProductDialog({
 }: {
   defaultVat: CrmVatRate;
   error: unknown;
+  /** Which catalog screen opened the dialog: picks the fields and defaults. */
+  kind: CrmProductKind;
   /** Where focus goes on close (the dialog has no Radix trigger). */
   onCloseAutoFocus: (event: Event) => void;
   /** Clear the relay error (after reloading the latest product). */
@@ -59,7 +64,12 @@ export function CrmProductDialog({
   product: CrmProduct | null;
 }) {
   const initialDraft = () =>
-    product ? productDraftFrom(product) : emptyProductDraft(defaultVat);
+    product
+      ? productDraftFrom(product)
+      : kind === "services"
+        ? emptyServiceDraft(defaultVat)
+        : emptyProductDraft(defaultVat);
+  const copy = kind === "services" ? ru.services : ru.products;
   const [baseline, setBaseline] = React.useState<ProductDraft>(initialDraft);
   const [draft, setDraft] = React.useState<ProductDraft>(initialDraft);
   const [baseRevision, setBaseRevision] = React.useState(
@@ -128,13 +138,14 @@ export function CrmProductDialog({
         >
           <DialogHeader>
             <DialogTitle>
-              {product ? ru.products.editTitle : ru.products.createTitle}
+              {product ? copy.editTitle : copy.createTitle}
             </DialogTitle>
           </DialogHeader>
           <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1">
             <CrmProductFormFields
               draft={draft}
               errors={visibleErrors}
+              kind={kind}
               mode={product ? "edit" : "create"}
               onChange={(patch) =>
                 setDraft((current) => ({ ...current, ...patch }))

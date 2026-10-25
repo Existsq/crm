@@ -38,7 +38,12 @@ export type CrmProductFields = {
   minStockMilli: number;
   requiresMarking: boolean;
   archived: boolean;
+  /** Booking duration in minutes; services and jobs only. */
+  durationMin: number | null;
 };
+
+/** Services (`service`, `job`) are booked; everything else is goods. */
+export type CrmProductKind = "services" | "goods";
 
 export type CrmProduct = CrmProductFields & {
   id: string;
@@ -57,6 +62,7 @@ export type CrmProductListFilter = {
   barcode?: string;
   /** Include archived products. */
   archived?: boolean;
+  kind?: CrmProductKind;
   limit?: number;
   after?: string | null;
 };
@@ -87,6 +93,7 @@ export type RawCrmProduct = {
   min_stock_milli: number;
   requires_marking: boolean;
   archived: boolean;
+  duration_min?: number | null;
   revision: string;
   updated_at: string;
 };
@@ -117,6 +124,7 @@ export function fromRawCrmProduct(raw: RawCrmProduct): CrmProduct {
     minStockMilli: raw.min_stock_milli,
     requiresMarking: raw.requires_marking,
     archived: raw.archived,
+    durationMin: raw.duration_min ?? null,
     revision: raw.revision,
     updatedAt: raw.updated_at,
   };
@@ -138,6 +146,7 @@ export function toRawCrmProductWrite(input: CrmProductWriteInput) {
     min_stock_milli: input.minStockMilli,
     requires_marking: input.requiresMarking,
     archived: input.archived,
+    duration_min: input.durationMin,
   };
 }
 
@@ -152,6 +161,7 @@ export async function listCrmProducts(
     archived: filter.archived ?? false,
     limit: filter.limit ?? null,
     after: filter.after ?? null,
+    kind: filter.kind ?? null,
   });
   return {
     products: raw.products.map(fromRawCrmProduct),

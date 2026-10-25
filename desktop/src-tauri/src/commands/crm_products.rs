@@ -56,14 +56,21 @@ pub async fn crm_list_products(
     archived: Option<bool>,
     limit: Option<u32>,
     after: Option<String>,
+    kind: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    let kind = match kind.as_deref() {
+        None => None,
+        Some(kind @ ("services" | "goods")) => Some(kind),
+        Some(other) => return Err(format!("invalid: unknown product kind {other:?}")),
+    };
     let path = products_path(
         query.as_deref(),
         barcode.as_deref(),
         archived.unwrap_or(false),
         limit,
         after.as_deref(),
+        kind,
     );
     get_relay_json::<Value>(&state, &path).await
 }
@@ -99,6 +106,7 @@ fn products_path(
     archived: bool,
     limit: Option<u32>,
     after: Option<&str>,
+    kind: Option<&str>,
 ) -> String {
     fn non_blank(value: Option<&str>) -> Option<&str> {
         value.map(str::trim).filter(|v| !v.is_empty())
@@ -118,6 +126,9 @@ fn products_path(
     }
     if let Some(cursor) = after.filter(|c| !c.is_empty()) {
         params.append_pair("after", cursor);
+    }
+    if let Some(kind) = kind {
+        params.append_pair("kind", kind);
     }
     let encoded = params.finish();
     if encoded.is_empty() {
@@ -254,11 +265,11 @@ mod tests {
     #[test]
     fn list_path_encodes_only_present_filters() {
         assert_eq!(
-            products_path(None, None, false, None, None),
+            products_path(None, None, false, None, None, None),
             "/crm/products"
         );
         assert_eq!(
-            products_path(Some("  "), Some(""), false, None, Some("")),
+            products_path(Some("  "), Some(""), false, None, Some(""), None),
             "/crm/products"
         );
         assert_eq!(
@@ -267,18 +278,23 @@ mod tests {
                 None,
                 true,
                 Some(50),
-                Some("c+/=")
+                Some("c+/="),
+                None
             ),
             "/crm/products?q=%D0%9C%D0%BE%D0%BB%D0%BE%D0%BA%D0%BE+3%2C2%25+%26+%D1%81%D1%8B%D1%80\
              &archived=true&limit=50&after=c%2B%2F%3D"
         );
         assert_eq!(
-            products_path(None, Some(" 4600051000057 "), false, Some(0), None),
+            products_path(None, Some(" 4600051000057 "), false, Some(0), None, None),
             "/crm/products?barcode=4600051000057&limit=1"
         );
         assert_eq!(
-            products_path(None, None, false, Some(5_000), None),
+            products_path(None, None, false, Some(5_000), None, None),
             "/crm/products?limit=200"
+        );
+        assert_eq!(
+            products_path(None, None, false, None, None, Some("services")),
+            "/crm/products?kind=services"
         );
     }
 }

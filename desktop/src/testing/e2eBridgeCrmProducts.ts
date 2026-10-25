@@ -28,6 +28,7 @@ export type MockCrmProductSeed = {
   min_stock_milli?: number;
   requires_marking?: boolean;
   archived?: boolean;
+  duration_min?: number | null;
 };
 
 /** What the product mock needs to know about the seeded CRM space. */
@@ -43,7 +44,12 @@ type ListPayload = {
   archived?: boolean | null;
   limit?: number | null;
   after?: string | null;
+  kind?: "services" | "goods" | null;
 };
+
+function bookable(object: CrmPaymentObject): boolean {
+  return object === "service" || object === "job";
+}
 
 type WritePayload = {
   input: Omit<RawCrmProduct, "id" | "revision" | "updated_at"> & {
@@ -79,6 +85,7 @@ export function seedMockCrmProducts(seeds: MockCrmProductSeed[] = []): void {
     min_stock_milli: seed.min_stock_milli ?? 0,
     requires_marking: seed.requires_marking ?? false,
     archived: seed.archived ?? false,
+    duration_min: seed.duration_min ?? null,
     revision: eventId(),
     updated_at: now,
   }));
@@ -112,6 +119,11 @@ function listProducts(
     : null;
   const matching = products
     .filter((p) => payload.archived || !p.archived)
+    .filter(
+      (p) =>
+        !payload.kind ||
+        bookable(p.payment_object) === (payload.kind === "services"),
+    )
     .filter((p) => !barcode || p.barcodes.includes(barcode))
     .filter(
       (p) =>
@@ -154,8 +166,18 @@ function normalize(input: WritePayload["input"]) {
   if (wholeOnly && input.min_stock_milli % 1000 !== 0) {
     throw `relay rejected event: invalid: min_stock_milli: ${input.unit} is sold in whole units`;
   }
+  const duration = input.duration_min ?? null;
+  if (duration !== null) {
+    if (!bookable(input.payment_object)) {
+      throw "relay rejected event: invalid: duration_min: only services and jobs carry a duration";
+    }
+    if (duration < 5 || duration > 720 || duration % 5 !== 0) {
+      throw "relay rejected event: invalid: duration_min: must be 5–720 minutes in steps of 5";
+    }
+  }
   return {
     ...input,
+    duration_min: duration,
     name,
     sku: input.sku?.trim() || null,
     category: input.category?.trim() || null,
@@ -205,6 +227,7 @@ function writeProduct({ input }: WritePayload, access: MockCrmAccess) {
     min_stock_milli: fields.min_stock_milli,
     requires_marking: fields.requires_marking,
     archived: fields.archived,
+    duration_min: fields.duration_min,
     revision,
     updated_at: new Date().toISOString(),
   };
@@ -249,6 +272,13 @@ export function handleCrmProductMockCommand(
     default:
       return undefined;
   }
+}
+
+/** Bookable mock products, for the staff mock's service checks. */
+export function mockCrmServiceIds(): Set<string> {
+  return new Set(
+    products.filter((p) => bookable(p.payment_object)).map((p) => p.id),
+  );
 }
 
 /** The mock product `productId`, for the sales mock's line lookups. */

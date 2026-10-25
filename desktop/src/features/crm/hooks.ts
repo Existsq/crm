@@ -21,6 +21,7 @@ import {
 import {
   listCrmProducts,
   writeCrmProduct,
+  type CrmProductKind,
   type CrmProductWriteInput,
 } from "@/shared/api/tauriCrmProducts";
 import {
@@ -97,13 +98,24 @@ export function useWriteCrmWarehouseMutation() {
  * and writes refetch it; the previous result stays on screen while a new
  * search loads.
  */
-export function useCrmProductsQuery(filter: { q: string; archived: boolean }) {
+export function useCrmProductsQuery(filter: {
+  q: string;
+  archived: boolean;
+  kind?: CrmProductKind;
+}) {
   return useInfiniteQuery({
-    queryKey: ["crm", "products", filter.q, filter.archived],
+    queryKey: [
+      "crm",
+      "products",
+      filter.kind ?? "all",
+      filter.q,
+      filter.archived,
+    ],
     queryFn: ({ pageParam }) =>
       listCrmProducts({
         query: filter.q,
         archived: filter.archived,
+        kind: filter.kind,
         limit: CRM_PRODUCTS_PAGE_SIZE,
         after: pageParam,
       }),

@@ -50,11 +50,31 @@ export const CRM_PRODUCT_VAT_CHOICES: readonly CrmVatRate[] = [
 ];
 
 export const MAX_BARCODES = 20;
+/** Service duration bounds (`buzz_crm::catalog`), minutes. */
+export const MAX_DURATION_MIN = 720;
+export const DURATION_STEP_MIN = 5;
 const SKU_PATTERN = /^[A-Za-z0-9._/-]{1,64}$/;
 
 /** Units sold in whole numbers only (`Unit::whole_only`). */
 export function isWholeOnlyUnit(unit: CrmUnit): boolean {
   return unit === "piece" || unit === "service_unit";
+}
+
+/** Services and jobs are booked and carry a duration. */
+export function isBookable(object: CrmPaymentObject): boolean {
+  return object === "service" || object === "job";
+}
+
+/** A duration as the journal shows it: 45 min, 1 h 30 min. */
+export function formatDuration(minutes: number): string {
+  const d = ru.services.duration;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return d.minutes.replace("{m}", String(rest));
+  if (rest === 0) return d.hours.replace("{h}", String(hours));
+  return d.hoursMinutes
+    .replace("{h}", String(hours))
+    .replace("{m}", String(rest));
 }
 
 /** The 20 % rates survive only on historical data. */
@@ -91,6 +111,8 @@ export type ProductDraft = {
   minStock: string;
   requiresMarking: boolean;
   archived: boolean;
+  /** Minutes as typed; used only for bookable payment objects. */
+  duration: string;
 };
 
 export type ProductDraftField =
@@ -99,11 +121,13 @@ export type ProductDraftField =
   | "barcodes"
   | "price"
   | "vat"
-  | "minStock";
+  | "minStock"
+  | "duration";
 
 /** Invalid fields in form order, for focusing the first one. */
 export const PRODUCT_DRAFT_FIELDS: readonly ProductDraftField[] = [
   "name",
+  "duration",
   "sku",
   "price",
   "vat",
@@ -130,6 +154,17 @@ export function emptyProductDraft(defaultVat: CrmVatRate): ProductDraft {
     minStock: "0",
     requiresMarking: false,
     archived: false,
+    duration: "",
+  };
+}
+
+/** A new service: sold per service, booked for an hour by default. */
+export function emptyServiceDraft(defaultVat: CrmVatRate): ProductDraft {
+  return {
+    ...emptyProductDraft(defaultVat),
+    unit: "service_unit",
+    paymentObject: "service",
+    duration: "60",
   };
 }
 
@@ -146,6 +181,7 @@ export function productDraftFrom(product: CrmProduct): ProductDraft {
     minStock: formatQty(product.minStockMilli),
     requiresMarking: product.requiresMarking,
     archived: product.archived,
+    duration: product.durationMin === null ? "" : String(product.durationMin),
   };
 }
 
@@ -183,6 +219,22 @@ export function validateProductDraft(draft: ProductDraft): ProductDraftResult {
     errors.minStock = ru.products.validation.minStock[minStock.reason];
   }
 
+  let durationMin: number | null = null;
+  const duration = draft.duration.trim();
+  if (isBookable(draft.paymentObject) && duration) {
+    const minutes = /^\d{1,4}$/.test(duration) ? Number(duration) : Number.NaN;
+    if (
+      !Number.isInteger(minutes) ||
+      minutes < DURATION_STEP_MIN ||
+      minutes > MAX_DURATION_MIN ||
+      minutes % DURATION_STEP_MIN !== 0
+    ) {
+      errors.duration = ru.services.validation.duration;
+    } else {
+      durationMin = minutes;
+    }
+  }
+
   if (!price.ok || !minStock.ok || Object.keys(errors).length > 0) {
     return { ok: false, errors };
   }
@@ -201,6 +253,7 @@ export function validateProductDraft(draft: ProductDraft): ProductDraftResult {
       minStockMilli: minStock.milli,
       requiresMarking: draft.requiresMarking,
       archived: draft.archived,
+      durationMin,
     },
   };
 }

@@ -31,6 +31,11 @@ import {
   type MockCrmSaleSeed,
   seedMockCrmSales,
 } from "./e2eBridgeCrmSales.ts";
+import {
+  handleCrmStaffMockCommand,
+  type MockCrmStaffSeed,
+  seedMockCrmStaff,
+} from "./e2eBridgeCrmStaff.ts";
 import { KIND_CRM_PRODUCT } from "@/features/crm/lib/crmKinds";
 
 type RawSettings = Extract<RawCrmSpace, { member: true }>["settings"];
@@ -71,6 +76,7 @@ export type MockCrmSeed = {
     parties?: MockCrmPartySeed[];
     sales?: MockCrmSaleSeed[];
     cash?: MockCrmCashSeed;
+    staff?: MockCrmStaffSeed[];
   } | null;
 };
 
@@ -143,6 +149,7 @@ export function resetMockCrm(): void {
   seedMockCrmProducts([]);
   seedMockCrmSales();
   seedMockCrmCash();
+  seedMockCrmStaff();
 }
 
 export function seedMockCrm(seed: MockCrmSeed): void {
@@ -153,6 +160,7 @@ export function seedMockCrm(seed: MockCrmSeed): void {
     seed.space?.warehouses?.[0]?.id ?? null,
   );
   seedMockCrmCash(seed.space?.cash);
+  seedMockCrmStaff(seed.space?.staff ?? []);
   state = {
     canCreate: seed.canCreate ?? true,
     loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
@@ -366,6 +374,11 @@ export function handleCrmMockCommand(
         requireCapability,
       });
       if (cash) return cash;
+      const staff = handleCrmStaffMockCommand(command, payload, {
+        channelId: state.space?.role ? state.space.channelId : null,
+        requireCapability,
+      });
+      if (staff) return staff;
       const result = handleCrmProductMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

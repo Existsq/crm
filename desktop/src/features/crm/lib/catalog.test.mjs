@@ -10,6 +10,8 @@ import {
   CRM_PRODUCT_VAT_CHOICES,
   CRM_UNITS,
   emptyProductDraft,
+  emptyServiceDraft,
+  formatDuration,
   parseBarcodes,
   productDraftFrom,
   productVatOptions,
@@ -90,6 +92,7 @@ test("a valid draft becomes trimmed product fields in kopecks", () => {
       minStockMilli: 5000,
       requiresMarking: false,
       archived: false,
+      durationMin: null,
     },
   });
 });
@@ -152,6 +155,7 @@ test("a stored product round-trips through the draft unchanged", () => {
     minStockMilli: 2500,
     requiresMarking: true,
     archived: false,
+    durationMin: null,
     revision: "ab".repeat(32),
     updatedAt: "2026-09-27T10:00:00Z",
   };
@@ -162,4 +166,43 @@ test("a stored product round-trips through the draft unchanged", () => {
   assert.ok(result.ok);
   const { id, revision, updatedAt, ...fields } = product;
   assert.deepEqual(result.fields, fields);
+});
+
+test("services carry a 5-minute-grid duration; goods never do", () => {
+  const service = (duration) =>
+    validateProductDraft({
+      ...emptyServiceDraft("none"),
+      name: "Haircut",
+      price: "1500",
+      duration,
+    });
+  const ok = service("45");
+  assert.equal(ok.ok && ok.fields.durationMin, 45);
+  assert.equal(ok.ok && ok.fields.paymentObject, "service");
+  assert.equal(ok.ok && ok.fields.unit, "service_unit");
+  const blank = service(" ");
+  assert.equal(blank.ok && blank.fields.durationMin, null);
+  for (const bad of ["0", "32", "725", "1.5", "abc"]) {
+    const result = service(bad);
+    assert.equal(result.ok, false, bad);
+    assert.equal(result.errors.duration, ru.services.validation.duration);
+  }
+  // A duration left over from a service is dropped when it becomes goods.
+  const goods = validateProductDraft(draft({ duration: "45" }));
+  assert.equal(goods.ok && goods.fields.durationMin, null);
+});
+
+test("durations read as hours and minutes", () => {
+  assert.equal(
+    formatDuration(45),
+    ru.services.duration.minutes.replace("{m}", "45"),
+  );
+  assert.equal(
+    formatDuration(120),
+    ru.services.duration.hours.replace("{h}", "2"),
+  );
+  assert.equal(
+    formatDuration(90),
+    ru.services.duration.hoursMinutes.replace("{h}", "1").replace("{m}", "30"),
+  );
 });

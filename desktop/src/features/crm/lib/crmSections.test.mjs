@@ -21,6 +21,16 @@ test("the default section is the first one: the catalog", () => {
   assert.equal(DEFAULT_CRM_SECTION, "products");
   assert.deepEqual(
     CRM_SECTIONS.map((section) => section.id),
-    ["products", "parties", "cash", "sales", "analytics", "settings"],
+    [
+      "products",
+      "services",
+      "staff",
+      "schedule",
+      "parties",
+      "cash",
+      "sales",
+      "analytics",
+      "settings",
+    ],
   );
 });

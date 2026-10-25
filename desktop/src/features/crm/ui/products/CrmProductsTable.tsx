@@ -1,8 +1,9 @@
 import { Pencil } from "lucide-react";
 
 import { ru } from "@/features/crm/i18n/ru";
+import { formatDuration } from "@/features/crm/lib/catalog";
 import { formatRubles } from "@/features/crm/lib/money";
-import type { CrmProduct } from "@/shared/api/tauriCrmProducts";
+import type { CrmProduct, CrmProductKind } from "@/shared/api/tauriCrmProducts";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 
@@ -11,17 +12,20 @@ const HEAD_CELL = "px-4 py-2.5 text-left text-xs font-medium";
 export function CrmProductsTable({
   busy,
   canEdit,
+  kind,
   onEdit,
   products,
 }: {
   /** A new search or refresh is loading over the rows shown. */
   busy: boolean;
   canEdit: boolean;
+  kind: CrmProductKind;
   /** `opener` is the row's button, to return focus to after editing. */
   onEdit: (product: CrmProduct, opener: HTMLElement) => void;
   products: CrmProduct[];
 }) {
   const columns = ru.products.columns;
+  const services = kind === "services";
   return (
     <div
       aria-busy={busy || undefined}
@@ -29,20 +33,30 @@ export function CrmProductsTable({
     >
       <table
         className="w-full min-w-[40rem] border-collapse text-sm"
-        data-testid="crm-products-table"
+        data-testid={services ? "crm-services-table" : "crm-products-table"}
       >
-        <caption className="sr-only">{ru.products.tableLabel}</caption>
+        <caption className="sr-only">
+          {services ? ru.services.tableLabel : ru.products.tableLabel}
+        </caption>
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
             <th className={HEAD_CELL} scope="col">
-              {columns.name}
+              {services ? ru.services.columns.name : columns.name}
             </th>
-            <th className={HEAD_CELL} scope="col">
-              {columns.sku}
-            </th>
-            <th className={HEAD_CELL} scope="col">
-              {columns.unit}
-            </th>
+            {services ? (
+              <th className={HEAD_CELL} scope="col">
+                {ru.services.columns.duration}
+              </th>
+            ) : (
+              <>
+                <th className={HEAD_CELL} scope="col">
+                  {columns.sku}
+                </th>
+                <th className={HEAD_CELL} scope="col">
+                  {columns.unit}
+                </th>
+              </>
+            )}
             <th className={`${HEAD_CELL} text-right`} scope="col">
               {columns.price}
             </th>
@@ -77,10 +91,26 @@ export function CrmProductsTable({
                   </p>
                 ) : null}
               </th>
-              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                {product.sku ?? "—"}
-              </td>
-              <td className="px-4 py-2.5">{ru.units.short[product.unit]}</td>
+              {services ? (
+                <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
+                  {product.durationMin === null ? (
+                    <span className="text-muted-foreground">
+                      {ru.services.noDuration}
+                    </span>
+                  ) : (
+                    formatDuration(product.durationMin)
+                  )}
+                </td>
+              ) : (
+                <>
+                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                    {product.sku ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {ru.units.short[product.unit]}
+                  </td>
+                </>
+              )}
               <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">
                 {formatRubles(product.priceMinor)}
               </td>

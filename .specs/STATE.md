@@ -44,9 +44,10 @@
 
 ## Handoff
 
-- **Feature**: customers, sales and analytics (branch `claude/project-thread-yqqm67`, stacked on `crm/catalog`)
-- **Completed**: kinds 42103 (party), 42104 (sale, posted once, numbered per space), 42105 (sale void); migrations 0052/0053 + `schema.sql`; relay ingest and `GET /crm/parties`, `/crm/sales`, `/crm/analytics` (space-timezone days, voided sales excluded); SDK builders; CLI `buzz crm parties|sales|analytics`; desktop sections Клиенты / Продажи / Аналитика; Postgres tests, relay e2e `e2e_crm_sales.rs`, desktop unit tests, Playwright `crm-sales.spec.ts`
-- **Not done**: no spec/design docs under `.specs/features/` for this feature yet; NIP-CRM.md does not describe 42102–42105; sales do not move stock (ledger feature next); no draft PR opened
-- **Next step**: write `.specs/features/crm-sales/spec.md` and the NIP section, open a draft PR targeting `crm/catalog`, then the stock ledger (receipts, write-offs, stock checks on sale)
+- **Goal**: replicate YCLIENTS (salon/barbershop booking) on top of the retail CRM; 8-phase plan: 1 services + staff + schedules, 2 appointment journal, 3 visit payment via the cash desk, 4 public online booking, 5 reminders, 6 payroll + service analytics, 7 stock ledger + tech cards, 8 loyalty
+- **Completed (phase 1)**: `duration_min` on bookable products (service/job, 5–720 step 5) and `kind=services|goods` on `GET /crm/products`; kinds 42131 (staff, CAS) and 42132 (working days of one staff member, days not listed keep their hours); migration 0055 + `schema.sql`; `GET /crm/staff`, `/crm/schedule`; SDK builders; NIP-CRM section; desktop sidebar sections Услуги / Сотрудники / График работы (week grid, day editor, weekday and shift templates); Postgres tests, relay e2e `e2e_crm_staff.rs`, unit tests, Playwright `crm-staff.spec.ts`
+- **Earlier on this branch**: customers, sales, analytics, cash desk (ATOL DTO10)
+- **Not done**: appointments (42133) with server-side overlap checks and relay slot calculation; staff are not linked to channel members in the UI (`member` is stored only); no draft PR opened (the user decides)
+- **Next step**: phase 2, the appointment journal
 - **Blockers**: none
 - **Branch**: claude/project-thread-yqqm67
