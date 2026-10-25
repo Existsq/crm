@@ -596,6 +596,86 @@ fn appointment_from_row(row: sqlx::postgres::PgRow) -> Result<CrmAppointmentReco
     })
 }
 
+/// Result of [`pay_appointment`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppointmentPayOutcome {
+    /// The visit now points at the sale and is done.
+    Paid,
+    /// No such appointment in this space.
+    Missing,
+    /// Another sale already paid for the visit.
+    AlreadyPaid,
+    /// A cancelled or missed visit cannot be paid.
+    NotPayable,
+}
+
+/// Link `sale_id` to the visit it pays for and mark the visit done. The
+/// sale event becomes the visit's revision, so a client editing the visit
+/// from before the payment gets a revision conflict.
+pub async fn pay_appointment(
+    tx: &mut Transaction<'_, Postgres>,
+    community: CommunityId,
+    space_channel_id: Uuid,
+    appointment_id: Uuid,
+    sale_id: Uuid,
+    event_id: &[u8],
+) -> Result<AppointmentPayOutcome> {
+    let row = sqlx::query(
+        "SELECT status, sale_id FROM crm_appointments \
+         WHERE community_id = $1 AND space_channel_id = $2 AND appointment_id = $3 \
+         FOR UPDATE",
+    )
+    .bind(community.as_uuid())
+    .bind(space_channel_id)
+    .bind(appointment_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(row) = row else {
+        return Ok(AppointmentPayOutcome::Missing);
+    };
+    if row.try_get::<Option<Uuid>, _>("sale_id")?.is_some() {
+        return Ok(AppointmentPayOutcome::AlreadyPaid);
+    }
+    let status: String = row.try_get("status")?;
+    if matches!(status.as_str(), "no_show" | "cancelled") {
+        return Ok(AppointmentPayOutcome::NotPayable);
+    }
+    sqlx::query(
+        "UPDATE crm_appointments SET sale_id = $4, status = 'done', \
+             revision_event_id = $5, updated_at = now() \
+         WHERE community_id = $1 AND space_channel_id = $2 AND appointment_id = $3",
+    )
+    .bind(community.as_uuid())
+    .bind(space_channel_id)
+    .bind(appointment_id)
+    .bind(sale_id)
+    .bind(event_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(AppointmentPayOutcome::Paid)
+}
+
+/// Undo [`pay_appointment`] when its sale is voided: the visit is unpaid and
+/// back to `arrived`. No-op for a sale that paid for no visit.
+pub async fn unpay_appointment(
+    tx: &mut Transaction<'_, Postgres>,
+    community: CommunityId,
+    sale_id: Uuid,
+    event_id: &[u8],
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE crm_appointments SET sale_id = NULL, status = 'arrived', \
+             revision_event_id = $3, updated_at = now() \
+         WHERE community_id = $1 AND sale_id = $2",
+    )
+    .bind(community.as_uuid())
+    .bind(sale_id)
+    .bind(event_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 impl Db {
     /// Appointments of the space.
     #[datastore_span(name = "crm_list_appointments", system = "postgresql")]

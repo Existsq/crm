@@ -116,6 +116,9 @@ pub struct SalePayload {
     /// Optional note.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Booked visit this sale pays for (kind 42133); the relay marks it done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub appointment_id: Option<Uuid>,
 }
 
 impl SalePayload {

@@ -31,8 +31,8 @@ pub mod stock;
 
 pub use analytics::{AnalyticsPeriod, SalesAnalytics};
 pub use appointments::{
-    AppointmentQuery, AppointmentServiceWrite, AppointmentWrite, AppointmentWriteOutcome,
-    CrmAppointmentRecord, SlotInputs, MAX_APPOINTMENT_RANGE_DAYS,
+    AppointmentPayOutcome, AppointmentQuery, AppointmentServiceWrite, AppointmentWrite,
+    AppointmentWriteOutcome, CrmAppointmentRecord, SlotInputs, MAX_APPOINTMENT_RANGE_DAYS,
 };
 pub use catalog::{
     CrmProductRecord, ProductPage, ProductQuery, ProductWrite, ProductWriteOutcome,

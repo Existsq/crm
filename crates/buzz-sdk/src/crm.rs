@@ -574,6 +574,7 @@ mod tests {
                 discount_minor: buzz_crm::Money::ZERO,
             }],
             note: None,
+            appointment_id: None,
         };
         assert!(build_crm_sale(channel, sale_id, sale(0)).is_err());
         let event = build_crm_sale(channel, sale_id, sale(2000))

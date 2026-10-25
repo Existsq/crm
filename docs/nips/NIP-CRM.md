@@ -181,6 +181,12 @@ A client booked with one staff member. Authorized like posting documents.
   time-holding visit of the same staff member (`conflict: …`). `source` is
   `staff` (default) or `online`.
 - A paid visit cannot be moved to another staff member, day or time.
+- A sale (`42104`) whose content carries `"appointment_id": "<uuid>"` pays
+  for that visit: the relay links the sale, sets the status to `done` and
+  makes the sale event the visit's revision. A missing, cancelled or missed
+  visit is `invalid:`; a visit another sale already paid is `conflict:`.
+  Voiding the sale (`42105`) unlinks it and puts the visit back to
+  `arrived`.
 ### `42106` — Stock document
 
 Receipt (`receipt`), write-off (`write_off`), inventory (`inventory`) or
