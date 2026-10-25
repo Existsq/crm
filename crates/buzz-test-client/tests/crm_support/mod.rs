@@ -14,6 +14,9 @@ use uuid::Uuid;
 pub const KIND_CRM_SPACE: u16 = 42100;
 pub const KIND_CRM_WAREHOUSE: u16 = 42101;
 pub const KIND_CRM_PRODUCT: u16 = 42102;
+pub const KIND_CRM_PARTY: u16 = 42103;
+pub const KIND_CRM_SALE: u16 = 42104;
+pub const KIND_CRM_SALE_VOID: u16 = 42105;
 
 pub fn relay_url() -> String {
     std::env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:3000".to_string())
@@ -150,6 +153,17 @@ pub async fn grant_community_role(pool: &sqlx::PgPool, community: Uuid, keys: &K
 /// Remove the space so later tests start from "no space". Deleting projection
 /// rows directly is test-only; the relay never deletes CRM rows.
 pub async fn cleanup_space(pool: &sqlx::PgPool, community: Uuid) {
+    for sql in [
+        "DELETE FROM crm_sale_lines WHERE community_id = $1",
+        "DELETE FROM crm_sales WHERE community_id = $1",
+        "DELETE FROM crm_parties WHERE community_id = $1",
+    ] {
+        sqlx::query(sql)
+            .bind(community)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("{sql}: {e}"));
+    }
     sqlx::query("DELETE FROM crm_product_barcodes WHERE community_id = $1")
         .bind(community)
         .execute(pool)

@@ -94,6 +94,7 @@ jobs:
             --test e2e_event_reminder \
             --test e2e_crm_space \
             --test e2e_crm_catalog \
+            --test e2e_crm_sales \
             --archive-file target/ci/backend-integration-tests.tar.zst
           postgres_package_args=()
           while IFS= read -r package; do
@@ -561,13 +562,13 @@ jobs:
           RELAY_URL: ws://localhost:3000
       - name: CRM e2e
         # Feature e2e for the retail CRM (space and warehouses 42100/42101,
-        # catalog 42102, GET /crm/*). The tests seed the community-admin role
+        # catalog 42102, parties and sales 42103–42105, GET /crm/*). The tests seed the community-admin role
         # through the relay's Postgres and need one space per community, so
         # they run serially against the same DATABASE_URL as the relay.
         run: |
           cargo nextest run \
             --archive-file target/ci/backend-integration-tests.tar.zst \
-            -E 'binary(e2e_crm_space) | binary(e2e_crm_catalog)' \
+            -E 'binary(e2e_crm_space) | binary(e2e_crm_catalog) | binary(e2e_crm_sales)' \
             --run-ignored ignored-only \
             --test-threads 1
         env:
