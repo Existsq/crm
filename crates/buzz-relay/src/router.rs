@@ -332,8 +332,22 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(api::crm::sales::SALE_PATH, get(api::crm::sales::get))
         .route(api::crm::sales::SHIFTS_PATH, get(api::crm::sales::shifts))
         .route(api::crm::staff::STAFF_PATH, get(api::crm::staff::list))
-        .route(api::crm::staff::STAFF_MEMBER_PATH, get(api::crm::staff::get))
-        .route(api::crm::staff::SCHEDULE_PATH, get(api::crm::staff::schedule))
+        .route(
+            api::crm::staff::STAFF_MEMBER_PATH,
+            get(api::crm::staff::get),
+        )
+        .route(
+            api::crm::staff::SCHEDULE_PATH,
+            get(api::crm::staff::schedule),
+        )
+        .route(api::crm::stock::STOCK_PATH, get(api::crm::stock::levels))
+        .route(api::crm::stock::MOVES_PATH, get(api::crm::stock::moves))
+        .route(api::crm::stock::DOCS_PATH, get(api::crm::stock::docs))
+        .route(api::crm::stock::DOC_PATH, get(api::crm::stock::doc))
+        .route(
+            api::crm::stock::TECH_CARDS_PATH,
+            get(api::crm::stock::tech_cards),
+        )
         .route(
             api::crm::sales::ANALYTICS_PATH,
             get(api::crm::sales::analytics),

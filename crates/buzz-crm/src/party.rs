@@ -44,6 +44,11 @@ impl PartyType {
     pub const fn buys(self) -> bool {
         matches!(self, PartyType::Customer | PartyType::Both)
     }
+
+    /// Whether the party may be named as the supplier on a goods receipt.
+    pub const fn supplies(self) -> bool {
+        matches!(self, PartyType::Supplier | PartyType::Both)
+    }
 }
 
 /// Content of a kind 42103 event (the party id is the `crm-id` tag).

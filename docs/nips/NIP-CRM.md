@@ -155,6 +155,53 @@ keep their hours. It has no `crm-id`.
   4 per day, sorted and non-overlapping.
 - Archived or unknown staff are `invalid:`.
 
+### `42106` — Stock document
+
+Receipt (`receipt`), write-off (`write_off`), inventory (`inventory`) or
+transfer (`transfer`), posted once under `crm-id`; requires `post_documents`.
+
+```json
+{
+  "kind": 42106,
+  "tags": [["h", "<space channel>"], ["crm-id", "<document uuid>"]],
+  "content": "{\"v\":1,\"type\":\"receipt\",\"warehouse_id\":\"<uuid>\",\"supplier_id\":\"<party uuid>\",\"reference\":\"ТН-15\",\"lines\":[{\"product_id\":\"<uuid>\",\"qty_milli\":10000,\"cost_minor\":25000}]}"
+}
+```
+
+- 1–500 lines, one per product; products must be goods (`payment_object`
+  `commodity` or `excise`) and quantities must respect the unit.
+- `receipt`: every line has `cost_minor` (purchase price per unit); optional
+  `supplier_id` (a live `supplier`/`both` party) and `reference`.
+- `write_off` and `transfer` take no costs; a transfer names
+  `to_warehouse_id` (another live warehouse).
+- `inventory`: `qty_milli` is the counted quantity (zero allowed); the relay
+  books the difference. A surplus is valued at `cost_minor` or the average cost.
+- Stock is valued at the moving average cost. With `allow_negative_stock`
+  off, a document or sale that would leave less than zero is `invalid: … not
+  enough stock …`.
+- The relay numbers documents per space and snapshots names and units.
+
+### `42107` — Stock document void
+
+`{"v":1,"reason":"…"}` under the document's `crm-id`; requires
+`void_documents`. It appends the reverse of every movement of the document.
+Voiding a receipt whose goods were already used is `invalid:` while negative
+stock is not allowed. A second void is `conflict:`.
+
+### `42108` — Service tech card
+
+The consumables of one service (`crm-id` = the service product, `service` or
+`job`), per service unit: `{"v":1,"items":[{"product_id":"<goods uuid>",
+"qty_milli":60000}]}` (0–50 goods, one per product). Create without
+`expected-revision`, replace with it; requires `edit_catalog`.
+
+### Stock effects of sales
+
+A sale (`42104`) takes its goods lines off its warehouse, and for each service
+line the tech-card consumables × quantity. Goods follow `allow_negative_stock`;
+consumables never block a sale and may go negative. A sale void (`42105`)
+returns everything the sale took.
+
 ## Relay responses
 
 | Situation | `OK` message | HTTP bridge |
@@ -193,6 +240,18 @@ archived staff); `GET /crm/staff/{id}` returns one. `GET
 `{"from", "to", "days": [{"staff_id", "date", "intervals": [{"start", "end"}]}]}`
 with interval bounds in minutes after midnight. `GET /crm/products` takes
 `kind=services` or `kind=goods`.
+
+`GET /crm/stock?warehouse=<uuid>&q=&low=true` returns `{"warehouse_id",
+"items": [{"product_id", "name", "sku", "unit", "category", "price_minor",
+"min_stock_milli", "qty_milli", "value_minor", "archived"}], "totals":
+{"value_minor", "low_count"}}` (all warehouses summed without `warehouse`).
+`GET /crm/stock/moves?warehouse=&product=&before=&limit=` returns the movement
+journal newest first (`source` is `receipt`, `write_off`, `inventory`,
+`transfer`, `sale` or `consumable`; `reversal` marks void moves), with `next`.
+`GET /crm/stock/docs?type=&before=&limit=` and `GET /crm/stock/docs/{id}` (with
+`lines`) read documents; `GET /crm/tech-cards` returns `{"cards": [{"service_id",
+"service_name", "items": [{"product_id", "product_name", "unit",
+"qty_milli"}], "revision"}]}`.
 
 Unauthenticated requests get 401; when relay membership is required, callers
 who are not relay members get 403 `relay_membership_required`.

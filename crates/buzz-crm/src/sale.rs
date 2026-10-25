@@ -281,7 +281,7 @@ impl SaleVoidPayload {
     }
 }
 
-fn bounded(value: &str, field: &'static str, max: usize) -> Result<String> {
+pub(crate) fn bounded(value: &str, field: &'static str, max: usize) -> Result<String> {
     if value.chars().count() > max || value.chars().any(|c| c.is_control() && c != '\n') {
         return Err(CrmError::field(
             field,
