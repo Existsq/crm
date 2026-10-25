@@ -42,25 +42,11 @@ test("online booking kinds follow the wire contract", () => {
   assert.equal(KIND_CRM_ONLINE_BOOKING_SETTINGS, 42135);
 });
 
-// Kinds the desktop handles before the relay registry defines them (the
-// online booking backend lands separately). Once kind.rs has them this set
-// matches nothing and the check below is exact equality again.
-const PENDING_RELAY_KINDS = new Set([
-  KIND_CRM_ONLINE_BOOKING,
-  KIND_CRM_ONLINE_BOOKING_SETTINGS,
-]);
-
 test("the desktop subscribes to every CRM kind the relay defines", () => {
   const relayKinds = [
     ...kindRs.matchAll(/pub const KIND_CRM_\w+: u32 = (\d+);/g),
   ].map((match) => Number(match[1]));
-  for (const kind of relayKinds) {
-    assert.ok(CRM_KINDS.includes(kind), `relay kind ${kind} not subscribed`);
-  }
-  const extra = CRM_KINDS.filter((kind) => !relayKinds.includes(kind));
-  for (const kind of extra) {
-    assert.ok(PENDING_RELAY_KINDS.has(kind), `${kind} unknown to the relay`);
-  }
+  assert.deepEqual([...CRM_KINDS].sort(), relayKinds.sort());
 });
 
 test("every CRM kind sits in the reserved CRM block", () => {
