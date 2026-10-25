@@ -313,6 +313,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/workflows/{workflow_id}/runs/{run_id}/approvals",
             get(api::workflows::run_approvals),
         )
+        // CRM read models (NIP-98 auth + CRM space membership).
+        .route(api::crm::SPACE_PATH, get(api::crm::space))
         .route(
             "/operator/communities",
             get(api::operator::list_owned_communities).post(api::operator::provision_community),

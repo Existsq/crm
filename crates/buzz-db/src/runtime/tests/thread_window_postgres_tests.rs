@@ -311,7 +311,8 @@ async fn migration_schema_thread_window_prebuild_does_not_queue_behind_writer() 
         production_result.is_ok(),
         "production migrator must preserve ingestion progress: {production_result:?}"
     );
-    assert_eq!(version, 49);
+    // 0049 is the migration under test; later migrations may follow it.
+    assert!(version >= 49, "production migrator stopped at {version}");
     assert_eq!(final_oid, oid, "prebuild must not be replaced");
     assert_eq!(count, 4, "all writer witnesses must persist");
 }

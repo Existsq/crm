@@ -511,6 +511,9 @@ fn required_scope_for_kind(kind: u32, event: &Event) -> Result<Scope, &'static s
         // Ingest persists them to `moderation_reports` and suppresses public
         // storage/fanout; reports are signals, never enforcement triggers.
         KIND_REPORT | KIND_PRODUCT_FEEDBACK => Ok(Scope::MessagesWrite),
+        // CRM kinds (42100–42199): scope only proves the transport can write
+        // messages; the CRM branch authorizes role × action in its transaction.
+        k if buzz_core::kind::is_crm_kind(k) => Ok(Scope::MessagesWrite),
         // Community moderation commands are direct, mod-authz-gated writes.
         // Scope only proves the transport can submit message writes; the
         // command handler owns role/capability authorization.
@@ -794,7 +797,7 @@ pub(crate) fn requires_h_channel_scope(kind: u32) -> bool {
             | KIND_HUDDLE_PARTICIPANT_LEFT
             | KIND_HUDDLE_ENDED
             | KIND_HUDDLE_GUIDELINES
-    )
+    ) || buzz_core::kind::is_crm_kind(kind)
 }
 
 /// Check channel membership: member OR open-visibility channel.
@@ -2780,6 +2783,12 @@ async fn ingest_event_inner(
             .map_err(|e| IngestError::Rejected(format!("invalid: {e}")))?;
     }
 
+    // CRM history is immutable and its space channel must stay private,
+    // permanent and present (docs/crm/adr/0002).
+    if super::crm::guards::applies_to(kind_u32) {
+        super::crm::guards::validate(tenant, state, kind_u32, &event, channel_id).await?;
+    }
+
     if channel_id.is_some() {
         // Allow kind:9002 with archived=false (unarchive operation)
         let is_unarchive = kind_u32 == KIND_NIP29_EDIT_METADATA
@@ -2795,6 +2804,25 @@ async fn ingest_event_inner(
                 }
             }
         }
+    }
+
+    // CRM kinds own their storage: event + projection rows in one transaction
+    // after an uncached role check (docs/crm/adr/0001). `requires_h_channel_scope`
+    // guaranteed the channel above.
+    if buzz_core::kind::is_crm_kind(kind_u32) {
+        let ch_id = channel_id.ok_or_else(|| {
+            IngestError::Rejected("invalid: CRM events must include an h tag".into())
+        })?;
+        return super::crm::ingest_crm_event(
+            tenant,
+            state,
+            tracer,
+            &event,
+            &auth,
+            ch_id,
+            threaded_visibility,
+        )
+        .await;
     }
 
     // NIP-09: kind:5 may reference targets via `e` tag (regular events) OR

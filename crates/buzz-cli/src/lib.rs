@@ -279,6 +279,83 @@ enum Cmd {
     /// Community moderation — reports queue, bans, timeouts, audit trail
     #[command(subcommand)]
     Moderation(ModerationCmd),
+    /// Retail CRM — CRM space, warehouses (kinds 42100–42199)
+    #[command(subcommand)]
+    Crm(CrmCmd),
+}
+
+#[derive(Subcommand)]
+pub enum CrmCmd {
+    /// Inspect or create the community's CRM space
+    #[command(subcommand)]
+    Space(CrmSpaceCmd),
+    /// Create or update CRM warehouses
+    #[command(subcommand)]
+    Warehouses(CrmWarehousesCmd),
+}
+
+#[derive(Subcommand)]
+pub enum CrmSpaceCmd {
+    /// Show the CRM space, your role and warehouses (GET /crm/space)
+    Show,
+    /// Bind a private channel as the CRM space (community owner/admin only)
+    Init {
+        /// Private stream channel UUID to bind
+        #[arg(long)]
+        channel: String,
+        /// IANA timezone for document dates and analytics
+        #[arg(long, default_value = "Europe/Moscow")]
+        timezone: String,
+        /// Fiscalization policy: required, optional or off
+        #[arg(long, default_value = "required")]
+        fiscalization: String,
+        /// Default VAT for new products (e.g. vat22, vat10, none)
+        #[arg(long, default_value = "vat22")]
+        default_vat: String,
+        /// Allow stock to go below zero
+        #[arg(long)]
+        allow_negative_stock: bool,
+        /// Name of the default warehouse created with the space
+        #[arg(long, default_value = "Основной склад")]
+        warehouse_name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CrmWarehousesCmd {
+    /// Create a warehouse in the CRM space
+    Create {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Warehouse name
+        #[arg(long)]
+        name: String,
+        /// Make it the default warehouse
+        #[arg(long)]
+        default: bool,
+    },
+    /// Update a warehouse; unspecified fields keep their current values
+    Update {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Warehouse UUID
+        #[arg(long)]
+        warehouse: String,
+        /// Expected revision (defaults to the current one from `buzz crm space show`)
+        #[arg(long)]
+        revision: Option<String>,
+        /// New name
+        #[arg(long)]
+        name: Option<String>,
+        /// Make it the default warehouse (true) — the default cannot be unset directly
+        #[arg(long)]
+        default: Option<bool>,
+        /// Archive (true) or restore (false) the warehouse
+        #[arg(long)]
+        archived: Option<bool>,
+    },
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -2202,6 +2279,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
         Cmd::Dms(sub) => commands::dms::dispatch(sub, &client).await,
         Cmd::Users(sub) => commands::users::dispatch(sub, &client, &cli.format).await,
         Cmd::Workflows(sub) => commands::workflows::dispatch(sub, &client).await,
+        Cmd::Crm(sub) => commands::crm::dispatch(sub, &client).await,
         Cmd::Feed(sub) => commands::feed::dispatch(sub, &client, &cli.format).await,
         Cmd::Social(sub) => commands::social::dispatch(sub, &client).await,
         Cmd::Notes(sub) => commands::notes::dispatch(sub, &client).await,

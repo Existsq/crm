@@ -100,6 +100,10 @@ run_unit_tests() {
   run_test_step "buzz-sdk unit tests" \
     cargo test -p buzz-sdk --lib -- --nocapture
 
+  # buzz-crm: pure CRM domain code. Mirrors `just test-unit`.
+  run_test_step "buzz-crm tests" \
+    cargo test -p buzz-crm -- --nocapture
+
   # Keep the relay-to-agent trust-boundary regressions in the fallback path
   # when cargo-nextest is unavailable.
   run_test_step "buzz-acp tests" \
@@ -169,6 +173,13 @@ run_unit_tests() {
 
   run_test_step "buzz-relay storage snapshot tests" \
     cargo test -p buzz-relay --lib storage_sweep::tests:: -- --nocapture
+
+  # CRM authorization decisions, guards and read-model shaping (DB-free).
+  run_test_step "buzz-relay CRM handler tests" \
+    cargo test -p buzz-relay --lib handlers::crm:: -- --nocapture
+
+  run_test_step "buzz-relay CRM read API tests" \
+    cargo test -p buzz-relay --lib api::crm::tests:: -- --nocapture
 }
 
 # ---- DB / integration tests (infra required) --------------------------------

@@ -1,0 +1,87 @@
+[
+  {
+    "price_minor": 10000,
+    "qty_milli": 1000,
+    "amount_minor": 10000
+  },
+  {
+    "price_minor": 9999,
+    "qty_milli": 3000,
+    "amount_minor": 29997
+  },
+  {
+    "price_minor": 12345,
+    "qty_milli": 1500,
+    "amount_minor": 18518
+  },
+  {
+    "price_minor": 1,
+    "qty_milli": 500,
+    "amount_minor": 1
+  },
+  {
+    "price_minor": 1,
+    "qty_milli": 499,
+    "amount_minor": 0
+  },
+  {
+    "price_minor": 19990,
+    "qty_milli": 250,
+    "amount_minor": 4998
+  },
+  {
+    "price_minor": 7777,
+    "qty_milli": 333,
+    "amount_minor": 2590
+  },
+  {
+    "price_minor": 100,
+    "qty_milli": 1,
+    "amount_minor": 0
+  },
+  {
+    "price_minor": 999999,
+    "qty_milli": 1001,
+    "amount_minor": 1000999
+  },
+  {
+    "price_minor": 0,
+    "qty_milli": 5000,
+    "amount_minor": 0
+  },
+  {
+    "price_minor": 4550,
+    "qty_milli": 2500,
+    "amount_minor": 11375
+  },
+  {
+    "price_minor": 33333,
+    "qty_milli": 1333,
+    "amount_minor": 44433
+  },
+  {
+    "price_minor": 250,
+    "qty_milli": 2,
+    "amount_minor": 1
+  },
+  {
+    "price_minor": 12345,
+    "qty_milli": -1500,
+    "amount_minor": -18518
+  },
+  {
+    "price_minor": 89900,
+    "qty_milli": 1,
+    "amount_minor": 90
+  },
+  {
+    "price_minor": 89900,
+    "qty_milli": 999,
+    "amount_minor": 89810
+  },
+  {
+    "price_minor": 1,
+    "qty_milli": 1000000,
+    "amount_minor": 1000
+  }
+]

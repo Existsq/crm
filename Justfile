@@ -382,6 +382,8 @@ test-unit:
         # invocation hits. Enumerated explicitly because nothing in CI runs
         # `cargo test --workspace` — membership buys clippy/check, not tests.
         cargo nextest run -p buzz-sdk --lib
+        # buzz-crm: pure CRM domain code (money, VAT, authz, payloads). No infra.
+        cargo nextest run -p buzz-crm
         # buzz-acp owns the relay-to-agent trust boundary. Run its tests here so
         # forged relay events cannot regain a path into agent routing unnoticed.
         cargo nextest run -p buzz-acp
@@ -472,7 +474,7 @@ test-unit:
         # because they live in the binary target; the nested
         # `tests::postgres_tests::` stays in the PostgreSQL lane.
         cargo nextest run -p buzz-relay --lib --bin buzz-relay \
-            -E 'test(/^api::admin::/) + test(/^handlers::channel_authz::/) + test(/^handlers::moderation_authz::/) + test(/^handlers::side_effects::tests::/) + test(/^storage_sweep::tests::/) + test(/^nip_fi_http::tests::/) + test(/^nip_fi_config::tests::/) + test(/^router::tests::/) + test(/^api::parse_query_tests::/) + test(/^api::git::transport::off_mode_precedence_tests::/) + (kind(bin) & (test(/^tests::/) + test(/^composition_tests::/)) - test(/^tests::postgres_tests::/))'
+            -E 'test(/^api::admin::/) + test(/^handlers::channel_authz::/) + test(/^handlers::moderation_authz::/) + test(/^handlers::side_effects::tests::/) + test(/^storage_sweep::tests::/) + test(/^nip_fi_http::tests::/) + test(/^nip_fi_config::tests::/) + test(/^router::tests::/) + test(/^api::parse_query_tests::/) + test(/^api::git::transport::off_mode_precedence_tests::/) + test(/^handlers::crm::/) + test(/^api::crm::tests::/) + (kind(bin) & (test(/^tests::/) + test(/^composition_tests::/)) - test(/^tests::postgres_tests::/))'
         # ACP author-gate and queue tests protect the trust boundary between
         # relay events and agent prompts. They are infra-free; ignored lifecycle
         # tests remain excluded and run in their dedicated integration lanes.

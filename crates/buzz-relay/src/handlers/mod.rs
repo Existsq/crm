@@ -12,6 +12,8 @@ pub mod command_executor;
 pub mod community_provisioning;
 /// NIP-45 COUNT handler.
 pub mod count;
+/// CRM ingest branch (kinds 42100–42199) and CRM guards.
+pub mod crm;
 /// EVENT handler — WS dispatcher → ingest pipeline → fan-out.
 pub mod event;
 /// NIP-IA identity archive request handler (kinds 9035–9036).

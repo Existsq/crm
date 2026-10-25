@@ -14,6 +14,8 @@ pub mod channel;
 pub mod channel_members;
 /// Community lifecycle and host-map persistence.
 pub mod community;
+/// CRM projections (spaces, warehouses) written with their signed events.
+pub mod crm;
 /// Durable whole-community deletion lifecycle and PostgreSQL adapter.
 pub mod deletion;
 /// Direct message channel persistence.

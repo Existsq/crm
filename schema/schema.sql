@@ -1921,3 +1921,71 @@ CREATE TABLE storage_accounting_snapshots (
 
 INSERT INTO _operator_global_tables (table_name, reason) VALUES
     ('storage_accounting_snapshots', 'deployment-global completed media accounting handoff');
+
+-- ── CRM (retail fork) ─────────────────────────────────────────────────────────
+-- Projections of signed CRM events (kinds 42100–42199), written in the same
+-- transaction as the event. See docs/crm/adr/0001 and 0002. Keep these
+-- definitions identical to migrations/0050_crm_spaces.sql and later CRM
+-- migrations.
+
+CREATE TABLE crm_spaces (
+    community_id       UUID        NOT NULL REFERENCES communities(id),
+    channel_id         UUID        NOT NULL,
+    settings           JSONB       NOT NULL CHECK (jsonb_typeof(settings) = 'object'),
+    revision_event_id  BYTEA       NOT NULL CHECK (length(revision_event_id) = 32),
+    created_by         BYTEA       NOT NULL CHECK (length(created_by) = 32),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (community_id, channel_id),
+    FOREIGN KEY (community_id, channel_id) REFERENCES channels (community_id, id)
+);
+
+-- One CRM space per community.
+CREATE UNIQUE INDEX crm_spaces_one_per_community ON crm_spaces (community_id);
+
+CREATE TABLE crm_warehouses (
+    community_id       UUID        NOT NULL REFERENCES communities(id),
+    warehouse_id       UUID        NOT NULL,
+    space_channel_id   UUID        NOT NULL,
+    name               TEXT        NOT NULL CHECK (char_length(name) BETWEEN 1 AND 128),
+    is_default         BOOLEAN     NOT NULL DEFAULT FALSE,
+    archived_at        TIMESTAMPTZ,
+    revision_event_id  BYTEA       NOT NULL CHECK (length(revision_event_id) = 32),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (community_id, warehouse_id),
+    FOREIGN KEY (community_id, space_channel_id) REFERENCES crm_spaces (community_id, channel_id),
+    CHECK (NOT (is_default AND archived_at IS NOT NULL))
+);
+
+-- Exactly one default warehouse per space is enforced by this index plus the
+-- relay (which moves the flag inside the write transaction).
+CREATE UNIQUE INDEX crm_warehouses_one_default
+    ON crm_warehouses (community_id, space_channel_id) WHERE is_default;
+
+-- Defence in depth for ADR-0002: while a channel hosts the CRM space it must
+-- stay private, permanent, unarchived and undeleted. The relay rejects such
+-- edits up front; this trigger also closes the race where a channel edit was
+-- validated before the space was bound but commits after it.
+CREATE FUNCTION crm_guard_space_channel() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF (NEW.visibility <> 'private'
+        OR NEW.ttl_seconds IS NOT NULL
+        OR NEW.archived_at IS NOT NULL
+        OR NEW.deleted_at IS NOT NULL)
+       AND EXISTS (
+           SELECT 1 FROM crm_spaces s
+            WHERE s.community_id = NEW.community_id AND s.channel_id = NEW.id
+       ) THEN
+        RAISE EXCEPTION 'channel % hosts the CRM space and must stay private, permanent and live', NEW.id
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+CREATE TRIGGER crm_guard_space_channel BEFORE UPDATE ON channels
+FOR EACH ROW EXECUTE FUNCTION crm_guard_space_channel();
+
+SELECT attach_community_write_fence('crm_spaces');
+SELECT attach_community_write_fence('crm_warehouses');

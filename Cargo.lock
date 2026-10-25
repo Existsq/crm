@@ -1109,6 +1109,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "buzz-core",
+ "buzz-crm",
  "buzz-persona",
  "buzz-sdk",
  "buzz-ws-client",
@@ -1163,6 +1164,17 @@ dependencies = [
  "url",
  "uuid",
  "zeroize",
+]
+
+[[package]]
+name = "buzz-crm"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -1426,6 +1438,7 @@ dependencies = [
  "buzz-auth",
  "buzz-conformance",
  "buzz-core",
+ "buzz-crm",
  "buzz-datastore-tracing",
  "buzz-db",
  "buzz-deletion",
@@ -1512,6 +1525,7 @@ name = "buzz-sdk"
 version = "0.1.0"
 dependencies = [
  "buzz-core",
+ "buzz-crm",
  "nostr 0.44.7",
  "serde",
  "serde_json",
