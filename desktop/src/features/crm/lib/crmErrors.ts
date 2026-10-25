@@ -30,6 +30,10 @@ const DUPLICATE_CONFLICTS: ReadonlyArray<{
     pattern: /^barcode "?([^"\s]+)"? is already used by another product/,
     template: ru.errors.barcodeTaken,
   },
+  {
+    pattern: /^INN (\d+) is already used by another party/,
+    template: ru.errors.innTaken,
+  },
 ];
 
 function relayMessage(

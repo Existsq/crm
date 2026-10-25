@@ -23,6 +23,18 @@ import {
   writeCrmProduct,
   type CrmProductWriteInput,
 } from "@/shared/api/tauriCrmProducts";
+import {
+  getCrmAnalytics,
+  getCrmSale,
+  listCrmParties,
+  listCrmSales,
+  postCrmSale,
+  voidCrmSale,
+  writeCrmParty,
+  type CrmPartyRole,
+  type CrmPartyWriteInput,
+  type CrmSaleInput,
+} from "@/shared/api/tauriCrmSales";
 
 /** Root of every CRM query key; listed in `RELAY_QUERY_ROOTS`. */
 export const crmQueryRoot = ["crm"] as const;
@@ -32,6 +44,9 @@ export const crmSpaceQueryKey = ["crm", "space"] as const;
 const LIVE_INVALIDATE_DEBOUNCE_MS = 300;
 /** Products per `GET /crm/products` page ("Load more" fetches the next). */
 export const CRM_PRODUCTS_PAGE_SIZE = 50;
+/** Parties and sales per page ("Load more" fetches the next). */
+export const CRM_PARTIES_PAGE_SIZE = 50;
+export const CRM_SALES_PAGE_SIZE = 50;
 
 export function useCrmSpaceQuery() {
   return useQuery<CrmSpaceState>({
@@ -104,6 +119,102 @@ export function useWriteCrmProductMutation() {
   return useMutation({
     mutationFn: (input: CrmProductWriteInput) => writeCrmProduct(input),
     onSettled: invalidate,
+  });
+}
+
+/** Customer/supplier pages for a search and role filter. */
+export function useCrmPartiesQuery(filter: {
+  q: string;
+  role: CrmPartyRole | null;
+  archived: boolean;
+}) {
+  return useInfiniteQuery({
+    queryKey: ["crm", "parties", filter.q, filter.role, filter.archived],
+    queryFn: ({ pageParam }) =>
+      listCrmParties({
+        query: filter.q,
+        role: filter.role,
+        archived: filter.archived,
+        limit: CRM_PARTIES_PAGE_SIZE,
+        after: pageParam,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useWriteCrmPartyMutation() {
+  const invalidate = useInvalidateCrm();
+  return useMutation({
+    mutationFn: (input: CrmPartyWriteInput) => writeCrmParty(input),
+    onSettled: invalidate,
+  });
+}
+
+/** The sale journal, newest first; `customerId` narrows to one buyer. */
+export function useCrmSalesQuery(filter: {
+  customerId: string | null;
+  voided: boolean;
+  limit?: number;
+}) {
+  return useInfiniteQuery({
+    queryKey: ["crm", "sales", filter.customerId, filter.voided, filter.limit],
+    queryFn: ({ pageParam }) =>
+      listCrmSales({
+        customerId: filter.customerId,
+        voided: filter.voided,
+        limit: filter.limit ?? CRM_SALES_PAGE_SIZE,
+        before: pageParam,
+      }),
+    initialPageParam: null as number | null,
+    getNextPageParam: (lastPage) => lastPage.next ?? undefined,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+/** One sale with its lines. */
+export function useCrmSaleQuery(saleId: string | null) {
+  return useQuery({
+    queryKey: ["crm", "sale", saleId],
+    queryFn: () => getCrmSale(saleId as string),
+    enabled: saleId !== null,
+    staleTime: 30_000,
+  });
+}
+
+export function usePostCrmSaleMutation() {
+  const invalidate = useInvalidateCrm();
+  return useMutation({
+    mutationFn: (input: CrmSaleInput) => postCrmSale(input),
+    onSettled: invalidate,
+  });
+}
+
+export function useVoidCrmSaleMutation() {
+  const invalidate = useInvalidateCrm();
+  return useMutation({
+    mutationFn: (input: {
+      channelId: string;
+      saleId: string;
+      reason: string;
+    }) => voidCrmSale(input),
+    onSettled: invalidate,
+  });
+}
+
+/** Sales and customer analytics for whole days in the space timezone. */
+export function useCrmAnalyticsQuery(period: {
+  from: string | null;
+  to: string | null;
+}) {
+  return useQuery({
+    queryKey: ["crm", "analytics", period.from, period.to],
+    queryFn: () => getCrmAnalytics(period),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   });
 }
 

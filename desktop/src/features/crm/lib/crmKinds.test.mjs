@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 
 import {
   CRM_KINDS,
+  KIND_CRM_PARTY,
   KIND_CRM_PRODUCT,
+  KIND_CRM_SALE,
+  KIND_CRM_SALE_VOID,
   KIND_CRM_SPACE,
   KIND_CRM_WAREHOUSE,
 } from "./crmKinds.ts";
@@ -27,6 +30,9 @@ test("desktop CRM kinds match the relay registry", () => {
   assert.equal(KIND_CRM_SPACE, relayKind("KIND_CRM_SPACE"));
   assert.equal(KIND_CRM_WAREHOUSE, relayKind("KIND_CRM_WAREHOUSE"));
   assert.equal(KIND_CRM_PRODUCT, relayKind("KIND_CRM_PRODUCT"));
+  assert.equal(KIND_CRM_PARTY, relayKind("KIND_CRM_PARTY"));
+  assert.equal(KIND_CRM_SALE, relayKind("KIND_CRM_SALE"));
+  assert.equal(KIND_CRM_SALE_VOID, relayKind("KIND_CRM_SALE_VOID"));
 });
 
 test("the desktop subscribes to every CRM kind the relay defines", () => {
