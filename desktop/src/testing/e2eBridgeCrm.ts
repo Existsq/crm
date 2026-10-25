@@ -31,6 +31,11 @@ import {
   seedMockCrmAppointments,
 } from "./e2eBridgeCrmAppointments.ts";
 import {
+  handleCrmOnlineBookingMockCommand,
+  type MockCrmOnlineBookingSeed,
+  seedMockCrmOnlineBooking,
+} from "./e2eBridgeCrmOnlineBooking.ts";
+import {
   handleCrmSalesMockCommand,
   type MockCrmPartySeed,
   type MockCrmSaleSeed,
@@ -83,6 +88,7 @@ export type MockCrmSeed = {
     cash?: MockCrmCashSeed;
     staff?: MockCrmStaffSeed[];
     appointments?: MockCrmAppointmentSeed[];
+    onlineBooking?: MockCrmOnlineBookingSeed;
   } | null;
 };
 
@@ -157,6 +163,7 @@ export function resetMockCrm(): void {
   seedMockCrmCash();
   seedMockCrmStaff();
   seedMockCrmAppointments();
+  seedMockCrmOnlineBooking();
 }
 
 export function seedMockCrm(seed: MockCrmSeed): void {
@@ -169,6 +176,7 @@ export function seedMockCrm(seed: MockCrmSeed): void {
   seedMockCrmCash(seed.space?.cash);
   seedMockCrmStaff(seed.space?.staff ?? []);
   seedMockCrmAppointments(seed.space?.appointments ?? []);
+  seedMockCrmOnlineBooking(seed.space?.onlineBooking);
   state = {
     canCreate: seed.canCreate ?? true,
     loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
@@ -392,6 +400,15 @@ export function handleCrmMockCommand(
         requireCapability,
       });
       if (journal) return journal;
+      const onlineBooking = handleCrmOnlineBookingMockCommand(
+        command,
+        payload,
+        {
+          channelId: state.space?.role ? state.space.channelId : null,
+          requireCapability,
+        },
+      );
+      if (onlineBooking) return onlineBooking;
       const result = handleCrmProductMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

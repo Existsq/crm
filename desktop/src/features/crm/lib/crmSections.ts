@@ -10,6 +10,7 @@ export const CRM_SECTIONS = [
   { id: "services", label: ru.sections.services },
   { id: "staff", label: ru.sections.staff },
   { id: "schedule", label: ru.sections.schedule },
+  { id: "online-booking", label: ru.sections.onlineBooking },
   { id: "parties", label: ru.sections.parties },
   { id: "cash", label: ru.sections.cash },
   { id: "sales", label: ru.sections.sales },

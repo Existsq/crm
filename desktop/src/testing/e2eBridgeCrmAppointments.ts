@@ -34,6 +34,8 @@ export type MockCrmAppointmentSeed = {
   client_phone?: string | null;
   status?: CrmAppointmentStatus;
   note?: string | null;
+  /** `online` for a visit booked on the public page. */
+  source?: "staff" | "online";
 };
 
 export type MockCrmAppointmentAccess = {
@@ -126,7 +128,7 @@ export function seedMockCrmAppointments(
       client_phone: seed.client_phone ?? null,
       status: seed.status ?? "booked",
       note: seed.note ?? null,
-      source: "staff",
+      source: seed.source ?? "staff",
       outside_hours: false,
       sale_id: null,
       revision: eventId(),

@@ -802,6 +802,8 @@ pub fn run() {
             crm_list_appointments,
             crm_get_slots,
             crm_write_appointment,
+            crm_get_online_booking,
+            crm_write_online_booking,
             cash_get_settings,
             cash_set_settings,
             cash_device_status,

@@ -9,6 +9,7 @@ import {
 import { CrmAnalyticsSection } from "@/features/crm/ui/analytics/CrmAnalyticsSection";
 import { CrmCashSection } from "@/features/crm/ui/cash/CrmCashSection";
 import { CrmJournalSection } from "@/features/crm/ui/journal/CrmJournalSection";
+import { CrmOnlineBookingSection } from "@/features/crm/ui/onlineBooking/CrmOnlineBookingSection";
 import { CrmSettingsSection } from "@/features/crm/ui/CrmSettingsSection";
 import { CrmPartiesSection } from "@/features/crm/ui/parties/CrmPartiesSection";
 import { CrmProductsSection } from "@/features/crm/ui/products/CrmProductsSection";
@@ -42,6 +43,8 @@ function CrmSectionContent({
       return <CrmStaffSection space={space} />;
     case "schedule":
       return <CrmScheduleSection space={space} />;
+    case "online-booking":
+      return <CrmOnlineBookingSection space={space} />;
     case "parties":
       return <CrmPartiesSection space={space} />;
     case "cash":

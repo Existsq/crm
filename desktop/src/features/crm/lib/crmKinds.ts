@@ -16,6 +16,9 @@ export const KIND_CRM_CASH_SHIFT = 42121;
 export const KIND_CRM_STAFF = 42131;
 export const KIND_CRM_STAFF_SCHEDULE = 42132;
 export const KIND_CRM_APPOINTMENT = 42133;
+/** Relay-signed booking from the public page; the desktop only reads it. */
+export const KIND_CRM_ONLINE_BOOKING = 42134;
+export const KIND_CRM_ONLINE_BOOKING_SETTINGS = 42135;
 
 /** Every CRM kind the desktop subscribes to for live refresh. */
 export const CRM_KINDS: readonly number[] = [
@@ -30,4 +33,6 @@ export const CRM_KINDS: readonly number[] = [
   KIND_CRM_STAFF,
   KIND_CRM_STAFF_SCHEDULE,
   KIND_CRM_APPOINTMENT,
+  KIND_CRM_ONLINE_BOOKING,
+  KIND_CRM_ONLINE_BOOKING_SETTINGS,
 ];

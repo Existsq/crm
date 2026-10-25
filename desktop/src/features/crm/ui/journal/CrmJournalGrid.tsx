@@ -8,6 +8,7 @@ import {
   journalRows,
 } from "@/features/crm/lib/journal";
 import { formatClock } from "@/features/crm/lib/schedule";
+import { CrmOnlineBadge } from "@/features/crm/ui/journal/CrmOnlineBadge";
 import type {
   CrmAppointment,
   CrmAppointmentStatus,
@@ -57,10 +58,15 @@ function AppointmentCard({
   const services = appointment.serviceNames.join(", ");
   return (
     <button
-      aria-label={j.openAppointment
-        .replace("{time}", time)
-        .replace("{client}", client)
-        .replace("{services}", services)}
+      aria-label={[
+        j.openAppointment
+          .replace("{time}", time)
+          .replace("{client}", client)
+          .replace("{services}", services),
+        appointment.source === "online" ? j.onlineBadgeLabel : null,
+      ]
+        .filter(Boolean)
+        .join(". ")}
       className={cn(
         "absolute z-10 overflow-hidden rounded-md border-l-4 border px-2 py-1 text-left text-xs shadow-xs transition-colors hover:brightness-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
         STATUS_STYLES[appointment.status],
@@ -82,15 +88,19 @@ function AppointmentCard({
           {j.statuses[appointment.status]}
         </span>
       </span>
-      <span className="block truncate font-medium">{client}</span>
+      <span className="flex items-center gap-1">
+        <span className="truncate font-medium">{client}</span>
+        {appointment.source === "online" ? (
+          <CrmOnlineBadge
+            testId={`crm-journal-appointment-${appointment.id}-online`}
+          />
+        ) : null}
+      </span>
       <span className="block truncate text-muted-foreground">{services}</span>
-      {appointment.outsideHours ||
-      appointment.source === "online" ||
-      appointment.saleId ? (
+      {appointment.outsideHours || appointment.saleId ? (
         <span className="block truncate text-2xs text-muted-foreground">
           {[
             appointment.saleId ? j.paidBadge : null,
-            appointment.source === "online" ? j.onlineBadge : null,
             appointment.outsideHours ? j.outsideHoursBadge : null,
           ]
             .filter(Boolean)

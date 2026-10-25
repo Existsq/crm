@@ -23,6 +23,7 @@ import {
   useWriteCrmAppointmentMutation,
 } from "@/features/crm/journalHooks";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
+import { CrmOnlineBadge } from "@/features/crm/ui/journal/CrmOnlineBadge";
 import { useDebouncedValue } from "@/features/crm/ui/products/useDebouncedValue";
 import { CrmSearchPicker } from "@/features/crm/ui/sales/CrmSearchPicker";
 import type { CrmMemberSpace } from "@/shared/api/tauriCrm";
@@ -374,7 +375,12 @@ export function CrmAppointmentDialog({
       >
         <form className="space-y-5" noValidate onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{editing ? d.editTitle : d.createTitle}</DialogTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <DialogTitle>{editing ? d.editTitle : d.createTitle}</DialogTitle>
+              {editing?.source === "online" ? (
+                <CrmOnlineBadge testId="crm-appointment-online" />
+              ) : null}
+            </div>
           </DialogHeader>
 
           <div data-field="client" tabIndex={-1}>
