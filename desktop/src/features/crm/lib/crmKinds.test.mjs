@@ -4,7 +4,12 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { CRM_KINDS, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE } from "./crmKinds.ts";
+import {
+  CRM_KINDS,
+  KIND_CRM_PRODUCT,
+  KIND_CRM_SPACE,
+  KIND_CRM_WAREHOUSE,
+} from "./crmKinds.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const kindRs = readFileSync(
@@ -21,6 +26,14 @@ function relayKind(name) {
 test("desktop CRM kinds match the relay registry", () => {
   assert.equal(KIND_CRM_SPACE, relayKind("KIND_CRM_SPACE"));
   assert.equal(KIND_CRM_WAREHOUSE, relayKind("KIND_CRM_WAREHOUSE"));
+  assert.equal(KIND_CRM_PRODUCT, relayKind("KIND_CRM_PRODUCT"));
+});
+
+test("the desktop subscribes to every CRM kind the relay defines", () => {
+  const relayKinds = [
+    ...kindRs.matchAll(/pub const KIND_CRM_\w+: u32 = (\d+);/g),
+  ].map((match) => Number(match[1]));
+  assert.deepEqual([...CRM_KINDS].sort(), relayKinds.sort());
 });
 
 test("every CRM kind sits in the reserved CRM block", () => {

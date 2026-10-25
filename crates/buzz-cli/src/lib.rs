@@ -279,7 +279,7 @@ enum Cmd {
     /// Community moderation — reports queue, bans, timeouts, audit trail
     #[command(subcommand)]
     Moderation(ModerationCmd),
-    /// Retail CRM — CRM space, warehouses (kinds 42100–42199)
+    /// Retail CRM — CRM space, warehouses, products (kinds 42100–42199)
     #[command(subcommand)]
     Crm(CrmCmd),
 }
@@ -292,6 +292,9 @@ pub enum CrmCmd {
     /// Create or update CRM warehouses
     #[command(subcommand)]
     Warehouses(CrmWarehousesCmd),
+    /// List, create, update or archive catalog products
+    #[command(subcommand)]
+    Products(CrmProductsCmd),
 }
 
 #[derive(Subcommand)]
@@ -355,6 +358,107 @@ pub enum CrmWarehousesCmd {
         /// Archive (true) or restore (false) the warehouse
         #[arg(long)]
         archived: Option<bool>,
+    },
+}
+
+/// Product fields shared by `create` and `update`; on update, an omitted flag
+/// keeps the current value.
+#[derive(clap::Args, Debug, Default)]
+pub struct CrmProductFields {
+    /// Product name (1–128 characters)
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Article number, unique per space; pass "" to clear it
+    #[arg(long)]
+    pub sku: Option<String>,
+    /// Barcode (repeat for several); replaces the whole barcode list
+    #[arg(long = "barcode")]
+    pub barcodes: Vec<String>,
+    /// Remove every barcode
+    #[arg(long, conflicts_with = "barcodes")]
+    pub clear_barcodes: bool,
+    /// Unit: piece, kilogram, gram, liter, milliliter, meter, square_meter, hour, service_unit
+    #[arg(long)]
+    pub unit: Option<String>,
+    /// Price per unit in rubles, e.g. 1234.50
+    #[arg(long)]
+    pub price: Option<String>,
+    /// VAT rate: none, vat0, vat5, vat7, vat10, vat22, vat105, vat107, vat110, vat122
+    #[arg(long)]
+    pub vat: Option<String>,
+    /// Fiscal item type: commodity, excise, job, service, another
+    #[arg(long)]
+    pub payment_object: Option<String>,
+    /// Free-text category; pass "" to clear it
+    #[arg(long)]
+    pub category: Option<String>,
+    /// Low-stock threshold in units, e.g. 5 or 1.5
+    #[arg(long)]
+    pub min_stock: Option<String>,
+    /// Goods that need a marking code (the v1 POS refuses them)
+    #[arg(long)]
+    pub requires_marking: Option<bool>,
+}
+
+#[derive(Subcommand)]
+pub enum CrmProductsCmd {
+    /// List or search products (GET /crm/products)
+    List {
+        /// Name substring or SKU prefix
+        #[arg(long)]
+        query: Option<String>,
+        /// Exact barcode
+        #[arg(long)]
+        barcode: Option<String>,
+        /// Include archived products
+        #[arg(long)]
+        archived: bool,
+        /// Page size (1–200, default 50)
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Cursor from the previous page's `next`
+        #[arg(long)]
+        after: Option<String>,
+    },
+    /// Show one product (GET /crm/products/{id})
+    Get {
+        /// Product UUID
+        #[arg(long)]
+        product: String,
+    },
+    /// Create a product (defaults: unit piece, VAT vat22, payment object commodity)
+    Create {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        #[command(flatten)]
+        fields: CrmProductFields,
+    },
+    /// Update a product; unspecified fields keep their current values
+    Update {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Product UUID
+        #[arg(long)]
+        product: String,
+        /// Expected revision (defaults to the current one)
+        #[arg(long)]
+        revision: Option<String>,
+        #[command(flatten)]
+        fields: CrmProductFields,
+    },
+    /// Archive a product (or restore it with --restore)
+    Archive {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Product UUID
+        #[arg(long)]
+        product: String,
+        /// Restore an archived product instead
+        #[arg(long)]
+        restore: bool,
     },
 }
 

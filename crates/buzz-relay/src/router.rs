@@ -316,6 +316,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         // CRM read models (NIP-98 auth + CRM space membership).
         .route(api::crm::SPACE_PATH, get(api::crm::space))
         .route(
+            api::crm::products::PRODUCTS_PATH,
+            get(api::crm::products::list),
+        )
+        .route(
+            api::crm::products::PRODUCT_PATH,
+            get(api::crm::products::get),
+        )
+        .route(
             "/operator/communities",
             get(api::operator::list_owned_communities).post(api::operator::provision_community),
         )

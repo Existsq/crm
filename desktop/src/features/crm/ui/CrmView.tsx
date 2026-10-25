@@ -7,6 +7,7 @@ import {
   type CrmSectionId,
 } from "@/features/crm/lib/crmSections";
 import { CrmSettingsSection } from "@/features/crm/ui/CrmSettingsSection";
+import { CrmProductsSection } from "@/features/crm/ui/products/CrmProductsSection";
 import { CrmSpaceGate } from "@/features/crm/ui/CrmSpaceGate";
 import type { CrmMemberSpace } from "@/shared/api/tauriCrm";
 import { cn } from "@/shared/lib/cn";
@@ -26,6 +27,8 @@ function CrmSectionContent({
   space: CrmMemberSpace;
 }) {
   switch (section) {
+    case "products":
+      return <CrmProductsSection space={space} />;
     case "settings":
       return <CrmSettingsSection space={space} />;
   }

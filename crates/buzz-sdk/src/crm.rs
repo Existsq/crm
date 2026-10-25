@@ -4,9 +4,10 @@
 //! the relay runs, so a builder never produces an event the relay would reject
 //! for shape reasons. Authorization and CAS checks still happen at the relay.
 
-use buzz_core::kind::{KIND_CRM_SPACE, KIND_CRM_WAREHOUSE};
+use buzz_core::kind::{KIND_CRM_PRODUCT, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE};
 use buzz_crm::{
-    space::PAYLOAD_VERSION, tags, SpacePayload, SpaceSettings, WarehousePayload, WarehouseSeed,
+    space::PAYLOAD_VERSION, tags, ProductPayload, SpacePayload, SpaceSettings, WarehousePayload,
+    WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -102,6 +103,32 @@ pub fn build_crm_warehouse(
     Ok(EventBuilder::new(Kind::Custom(KIND_CRM_WAREHOUSE as u16), content).tags(event_tags))
 }
 
+/// Build a kind 42102 product event: a create when `expected_revision` is
+/// `None`, otherwise an update of the product's current revision.
+///
+/// The payload's `v` is set to the current version and the content is
+/// validated (and normalized) with the relay's own rules before signing.
+pub fn build_crm_product(
+    channel_id: Uuid,
+    product_id: Uuid,
+    mut payload: ProductPayload,
+    expected_revision: Option<&str>,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = ProductPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let mut event_tags = vec![
+        tag(&["h", &channel_id.to_string()])?,
+        tag(&[tags::TAG_CRM_ID, &product_id.to_string()])?,
+    ];
+    if let Some(revision) = expected_revision {
+        event_tags.push(revision_tag(revision)?);
+    }
+    Ok(EventBuilder::new(Kind::Custom(KIND_CRM_PRODUCT as u16), content).tags(event_tags))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,6 +189,44 @@ mod tests {
             vec!["ab".repeat(32)]
         );
         assert!(SpacePayload::parse(&event.content, true).is_ok());
+    }
+
+    fn product(name: &str) -> ProductPayload {
+        ProductPayload {
+            v: 0,
+            name: name.into(),
+            sku: Some(" SKU-1 ".into()),
+            barcodes: vec!["4006381333931".into()],
+            unit: buzz_crm::Unit::Piece,
+            price_minor: buzz_crm::Money::from_minor(12_345).unwrap(),
+            vat: VatRate::Vat22,
+            payment_object: buzz_crm::PaymentObject::Commodity,
+            category: None,
+            min_stock_milli: buzz_crm::Qty::ZERO,
+            requires_marking: false,
+            archived: false,
+        }
+    }
+
+    #[test]
+    fn product_builder_normalizes_validates_and_tags() {
+        let channel = Uuid::new_v4();
+        let id = Uuid::new_v4();
+        assert!(build_crm_product(channel, id, product("  "), None).is_err());
+        let event = build_crm_product(channel, id, product(" Чай "), Some(&"cd".repeat(32)))
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_PRODUCT);
+        assert_eq!(tag_values(&event, "crm-id"), vec![id.to_string()]);
+        assert_eq!(
+            tag_values(&event, "expected-revision"),
+            vec!["cd".repeat(32)]
+        );
+        let parsed = ProductPayload::parse(&event.content).unwrap();
+        assert_eq!(parsed.v, PAYLOAD_VERSION);
+        assert_eq!(parsed.name, "Чай");
+        assert_eq!(parsed.sku.as_deref(), Some("SKU-1"));
     }
 
     #[test]

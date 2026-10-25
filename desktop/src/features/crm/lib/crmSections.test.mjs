@@ -16,6 +16,11 @@ test("known sections parse, anything else is rejected", () => {
   }
 });
 
-test("the default section is the first one", () => {
+test("the default section is the first one: the catalog", () => {
   assert.equal(DEFAULT_CRM_SECTION, CRM_SECTIONS[0].id);
+  assert.equal(DEFAULT_CRM_SECTION, "products");
+  assert.deepEqual(
+    CRM_SECTIONS.map((section) => section.id),
+    ["products", "settings"],
+  );
 });

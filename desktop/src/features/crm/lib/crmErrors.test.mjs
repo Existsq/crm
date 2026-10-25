@@ -30,6 +30,33 @@ test("relay prefixes map to Russian messages with the relay reason as detail", (
   }
 });
 
+test("duplicate SKU and barcode conflicts name the taken value", () => {
+  const sku = describeCrmError(
+    new Error(
+      'relay error 409: conflict: SKU "MLK-001" is already used by another product',
+    ),
+  );
+  assert.equal(sku.kind, "conflict");
+  assert.equal(
+    sku.message,
+    "Артикул «MLK-001» уже используется другим товаром.",
+  );
+  assert.equal(sku.detail, 'SKU "MLK-001" is already used by another product');
+
+  const barcode = describeCrmError(
+    "relay rejected event: conflict: barcode 4600051000057 is already used by another product",
+  );
+  assert.equal(
+    barcode.message,
+    "Штрихкод 4600051000057 уже используется другим товаром.",
+  );
+
+  const stale = describeCrmError(
+    "relay error 409: conflict: product changed since it was loaded",
+  );
+  assert.equal(stale.message, ru.errors.conflict);
+});
+
 test("transport failures are network errors without relay detail", () => {
   const described = describeCrmError("relay unreachable: request timed out");
   assert.deepEqual(described, {
