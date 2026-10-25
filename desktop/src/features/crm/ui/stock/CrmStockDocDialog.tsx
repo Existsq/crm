@@ -80,7 +80,7 @@ function LineRow({
   const unit = line.product.unit;
   const difference = type === "inventory" ? inventoryDifference(line) : null;
   const fields: ("qty" | "cost")[] =
-    type === "receipt" ? ["qty", "cost"] : ["qty"];
+    type === "receipt" || type === "inventory" ? ["qty", "cost"] : ["qty"];
   return (
     <tr data-testid={`crm-stock-line-${line.product.id}`}>
       <th className="px-3 py-2 text-left font-normal" scope="row">
@@ -98,7 +98,7 @@ function LineRow({
           : formatStockQty(line.onHandMilli, unit)}
       </td>
       {fields.map((field) => {
-        const label = field === "cost" ? dialog.cost : qtyLabel(type);
+        const label = field === "cost" ? costLabel(type) : qtyLabel(type);
         return (
           <td className="px-2 py-1.5 align-top" key={field}>
             <Input
@@ -153,6 +153,12 @@ function LineRow({
   );
 }
 
+function costLabel(type: CrmStockDocType): string {
+  return type === "inventory"
+    ? ru.stock.dialog.surplusCost
+    : ru.stock.dialog.cost;
+}
+
 function qtyLabel(type: CrmStockDocType): string {
   return type === "inventory" ? ru.stock.dialog.counted : ru.stock.dialog.qty;
 }
@@ -160,7 +166,7 @@ function qtyLabel(type: CrmStockDocType): string {
 /**
  * Post a receipt, write-off, inventory count or transfer. The caller owns the
  * mutation and picks `docId` once per opening, so a retried submit after a
- * lost response is a relay duplicate, never a second document.
+ * lost response can never post a second document.
  */
 export function CrmStockDocDialog({
   docId,
@@ -495,9 +501,9 @@ export function CrmStockDocDialog({
                       <th className={LINE_HEAD} scope="col">
                         {qtyLabel(type)}
                       </th>
-                      {type === "receipt" ? (
+                      {type === "receipt" || type === "inventory" ? (
                         <th className={LINE_HEAD} scope="col">
-                          {dialog.cost}
+                          {costLabel(type)}
                         </th>
                       ) : null}
                       {type === "inventory" ? (
@@ -547,6 +553,11 @@ export function CrmStockDocDialog({
                 </table>
               </div>
             )}
+            {type === "inventory" && lines.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {dialog.surplusCostHint}
+              </p>
+            ) : null}
             {tooMany ? (
               <p className="text-sm text-destructive" role="alert">
                 {dialog.tooManyLines}

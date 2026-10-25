@@ -105,7 +105,11 @@ export function evaluateStockLine(
           : validation.qty;
   }
   let costMinor: number | null = null;
-  if (type === "receipt") {
+  // Required on a receipt; on an inventory it optionally values a surplus.
+  if (
+    type === "receipt" ||
+    (type === "inventory" && draft.cost.trim() !== "")
+  ) {
     const cost = parseRubles(draft.cost);
     if (cost.ok) costMinor = cost.minor;
     else errors.cost = validation.cost;

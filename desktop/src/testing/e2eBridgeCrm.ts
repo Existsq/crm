@@ -399,7 +399,11 @@ export function handleCrmMockCommand(
         allowNegative,
         requireCapability,
       });
-      if (stock) return stock;
+      if (stock) {
+        return command === "crm_post_stock_doc"
+          ? { value: loseResponseIfArmed(stock.value) }
+          : stock;
+      }
       const cash = handleCrmCashMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

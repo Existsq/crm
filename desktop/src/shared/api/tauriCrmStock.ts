@@ -95,7 +95,7 @@ export type CrmStockDocLineInput = {
 
 export type CrmStockDocInput = {
   channelId: string;
-  /** Picked once per dialog, so a retried submit is a relay duplicate. */
+  /** Picked once per dialog, so a retried submit cannot post twice. */
   docId: string;
   type: CrmStockDocType;
   warehouseId: string;

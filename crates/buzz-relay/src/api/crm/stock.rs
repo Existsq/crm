@@ -148,19 +148,13 @@ pub async fn levels(
         .crm_list_stock(member.community(), member.space.channel_id, &query)
         .await
     {
-        Ok(items) => {
-            let value: i64 = items.iter().map(|item| item.value_minor).sum();
-            let low = items
-                .iter()
-                .filter(|item| item.qty_milli <= item.min_stock_milli && item.min_stock_milli > 0)
-                .count();
-            Json(json!({
-                "warehouse_id": query.warehouse_id,
-                "items": items,
-                "totals": { "value_minor": value, "low_count": low },
-            }))
-            .into_response()
-        }
+        Ok(list) => Json(json!({
+            "warehouse_id": query.warehouse_id,
+            "truncated": list.matched > list.items.len() as i64,
+            "items": list.items,
+            "totals": { "value_minor": list.value_minor, "low_count": list.low_count },
+        }))
+        .into_response(),
         Err(e) => internal_error(&format!("CRM stock read: {e}")).into_response(),
     }
 }

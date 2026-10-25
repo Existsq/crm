@@ -59,6 +59,16 @@ test("receipts need a cost, inventories accept zero, pieces stay whole", () => {
   const count = evaluateStockLine("inventory", line("0"));
   assert.equal(count.ok, true);
   assert.equal(count.line.costMinor, null);
+  // An inventory may value a surplus; a write-off never sends a cost.
+  assert.equal(
+    evaluateStockLine("inventory", line("5", "120")).line.costMinor,
+    12_000,
+  );
+  assert.ok(evaluateStockLine("inventory", line("5", "abc")).errors.cost);
+  assert.equal(
+    evaluateStockLine("write_off", line("1", "120")).line.costMinor,
+    null,
+  );
   assert.equal(inventoryDifference(line("0")), -2000);
   assert.equal(inventoryDifference({ ...line("1"), onHandMilli: null }), null);
 });

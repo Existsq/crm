@@ -396,7 +396,7 @@ function listStock(p: any, access: MockStockAccess) {
       ({ product }) =>
         q === "" ||
         product.name.toLowerCase().includes(q) ||
-        (product.sku ?? "").toLowerCase().startsWith(q),
+        (product.sku ?? "").toLowerCase().includes(q),
     )
     .filter(
       ({ product, qty }) =>

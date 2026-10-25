@@ -185,8 +185,15 @@ async fn levels_journal_and_documents_round_trip() {
         .crm_list_stock(fx.community, fx.space, &StockQuery::default())
         .await
         .unwrap();
-    assert_eq!(stock.len(), 1, "services are not listed: {stock:?}");
-    assert_eq!((stock[0].qty_milli, stock[0].value_minor), (5_000, 100_000));
+    assert_eq!(stock.items.len(), 1, "services are not listed: {stock:?}");
+    assert_eq!(
+        (stock.matched, stock.value_minor, stock.low_count),
+        (1, 100_000, 0)
+    );
+    assert_eq!(
+        (stock.items[0].qty_milli, stock.items[0].value_minor),
+        (5_000, 100_000)
+    );
     let low = fx
         .db
         .crm_list_stock(
@@ -199,7 +206,7 @@ async fn levels_journal_and_documents_round_trip() {
         )
         .await
         .unwrap();
-    assert!(low.is_empty());
+    assert!(low.items.is_empty());
 
     // A second document reads the level the first left and voids it.
     let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
@@ -213,6 +220,7 @@ async fn levels_journal_and_documents_round_trip() {
             fx.community,
             fx.space,
             doc,
+            Utc::now(),
             &[3; 32],
             "ошибка",
             &fx.actor
@@ -221,7 +229,9 @@ async fn levels_journal_and_documents_round_trip() {
         .unwrap(),
         StockDocVoidOutcome::Voided
     );
-    let forward = moves_of_doc(&mut tx, fx.community, doc).await.unwrap();
+    let forward = moves_of_doc(&mut tx, fx.community, fx.space, doc, &["receipt"])
+        .await
+        .unwrap();
     assert_eq!(forward.len(), 1);
     let mut back = mv(&fx, shampoo, "receipt", -5_000, (0, 0));
     back.reversal = true;
@@ -243,6 +253,7 @@ async fn levels_journal_and_documents_round_trip() {
             fx.community,
             fx.space,
             doc,
+            Utc::now(),
             &[4; 32],
             "ещё",
             &fx.actor
@@ -252,7 +263,7 @@ async fn levels_journal_and_documents_round_trip() {
         StockDocVoidOutcome::AlreadyVoided
     );
     assert_eq!(
-        moves_of_doc(&mut tx, fx.community, doc)
+        moves_of_doc(&mut tx, fx.community, fx.space, doc, &["receipt"])
             .await
             .unwrap()
             .len(),
@@ -300,7 +311,7 @@ async fn levels_journal_and_documents_round_trip() {
         )
         .await
         .unwrap();
-    assert_eq!(low.len(), 1);
+    assert_eq!((low.items.len(), low.low_count), (1, 1));
     let _ = haircut;
 }
 

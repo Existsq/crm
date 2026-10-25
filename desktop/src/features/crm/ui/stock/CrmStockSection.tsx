@@ -75,21 +75,25 @@ export function CrmStockSection({ space }: { space: CrmMemberSpace }) {
   async function submit(input: CrmStockDocInput) {
     try {
       await post.mutateAsync(input);
-      setCreate((current) => ({ ...current, open: false }));
-      // The number is assigned by the relay; read it back for the toast.
-      const number = await getCrmStockDoc(input.docId)
-        .then((doc) => doc.number)
-        .catch(() => null);
-      toast.success(
-        number === null
-          ? ru.stock.docs.createdNoNumber
-          : ru.stock.docs.created
-              .replace("{type}", ru.stock.docTypes[input.type])
-              .replace("{number}", String(number)),
-      );
     } catch {
-      // Rendered in the dialog through the mutation error state.
+      // A lost response leaves the document posted and the retry is then
+      // rejected as a conflict, so look the id up before showing the error.
+      const posted = await getCrmStockDoc(input.docId).catch(() => null);
+      if (!posted) return; // Rendered in the dialog through the mutation error.
+      post.reset();
     }
+    setCreate((current) => ({ ...current, open: false }));
+    // The number is assigned by the relay; read it back for the toast.
+    const number = await getCrmStockDoc(input.docId)
+      .then((doc) => doc.number)
+      .catch(() => null);
+    toast.success(
+      number === null
+        ? ru.stock.docs.createdNoNumber
+        : ru.stock.docs.created
+            .replace("{type}", ru.stock.docTypes[input.type])
+            .replace("{number}", String(number)),
+    );
   }
 
   const restoreFocus = (event: Event) => {

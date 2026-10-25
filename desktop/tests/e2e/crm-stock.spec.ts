@@ -263,6 +263,20 @@ test("a paid service writes off the consumables of its tech card", async ({
   await expect(moves).toContainText("Продажа №1");
 });
 
+test("a receipt whose response was lost is posted once", async ({ page }) => {
+  await openStock(page, { ...seed("owner"), loseNextWriteResponse: true });
+  const dialog = await newDoc(page, "receipt");
+  await addLine(dialog, "краск");
+  await dialog.getByTestId("crm-stock-line-0-cost").fill("400");
+  await dialog.getByTestId("crm-stock-doc-submit").click();
+  await expect(dialog).toBeHidden();
+  await expect(qtyOf(page, DYE)).toHaveText("4 шт");
+  await page.getByTestId("crm-stock-tab-docs").click();
+  await expect(
+    page.getByTestId("crm-stock-docs-table").locator("tbody tr"),
+  ).toHaveCount(1);
+});
+
 test("a guest sees stock read-only", async ({ page }) => {
   await openStock(page, seed("guest"));
   await expect(page.getByTestId("crm-stock")).toContainText(

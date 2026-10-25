@@ -245,6 +245,7 @@ impl PreparedSaleVoid {
             tenant.community(),
             channel_id,
             self.sale_id,
+            stock::SALE_SOURCES,
             true,
             event,
         )

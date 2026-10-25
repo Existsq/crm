@@ -144,9 +144,19 @@ impl Ledger {
     }
 }
 
-fn short_of(product: &str, error: CrmError) -> IngestError {
+/// The forward moves a stock document reverts on void.
+const DOC_SOURCES: &[&str] = &["receipt", "write_off", "inventory", "transfer"];
+/// The forward moves a sale reverts on void.
+pub(super) const SALE_SOURCES: &[&str] = &["sale", "consumable"];
+
+/// A shortfall issuing `requested` of `product` with `on_hand` left.
+fn short_of(product: &str, on_hand: Qty, requested: Qty, error: CrmError) -> IngestError {
     match error {
-        CrmError::Field { .. } => rejected(format!("lines: not enough stock of {product:?}")),
+        CrmError::Field { .. } => rejected(format!(
+            "lines: not enough stock of {product:?}: {} on hand, {} requested",
+            units(on_hand.milli()),
+            units(requested.milli())
+        )),
         other => rejected(other),
     }
 }
@@ -299,7 +309,7 @@ impl PreparedStockDoc {
                 StockDocType::WriteOff => {
                     let delta = level
                         .issue(line.qty_milli, allow_negative)
-                        .map_err(|e| short_of(&product.name, e))?;
+                        .map_err(|e| short_of(&product.name, level.qty, line.qty_milli, e))?;
                     ledger.push(wh, line.product_id, source, false, delta)?;
                     (
                         Money::from_minor(-delta.value.minor()).map_err(invalid)?,
@@ -320,7 +330,7 @@ impl PreparedStockDoc {
                         .ok_or_else(|| IngestError::Internal("error: validated transfer".into()))?;
                     let out = level
                         .issue(line.qty_milli, allow_negative)
-                        .map_err(|e| short_of(&product.name, e))?;
+                        .map_err(|e| short_of(&product.name, level.qty, line.qty_milli, e))?;
                     ledger.push(wh, line.product_id, source, false, out)?;
                     let value = Money::from_minor(-out.value.minor()).map_err(invalid)?;
                     let into = ledger
@@ -441,6 +451,7 @@ impl PreparedStockDocVoid {
             community,
             channel_id,
             self.doc_id,
+            posted_at(event)?,
             event.id.as_bytes(),
             &self.payload.reason,
             &actor,
@@ -462,6 +473,7 @@ impl PreparedStockDocVoid {
             community,
             channel_id,
             self.doc_id,
+            DOC_SOURCES,
             allow_negative,
             event,
         )
@@ -470,17 +482,18 @@ impl PreparedStockDocVoid {
 }
 
 /// Append the reversal of every forward move of `doc_id` (a stock document
-/// or a sale). `allow_negative` decides whether taking back received goods
+/// or a sale, told apart by `sources`). `allow_negative` decides whether taking back received goods
 /// may leave a level below zero.
 pub(super) async fn revert_moves(
     tx: &mut Transaction<'static, Postgres>,
     community: CommunityId,
     channel_id: Uuid,
     doc_id: Uuid,
+    sources: &[&str],
     allow_negative: bool,
     event: &Event,
 ) -> Result<(), IngestError> {
-    let moves = store::moves_of_doc(tx, community, doc_id)
+    let moves = store::moves_of_doc(tx, community, channel_id, doc_id, sources)
         .await
         .map_err(|e| db_error("read CRM stock moves", e))?;
     if moves.is_empty() {
@@ -607,13 +620,9 @@ pub(super) async fn post_sale(
     for line in goods {
         let name = &sold[&line.product_id].name;
         let level = ledger.level(warehouse_id, line.product_id);
-        let delta = level.issue(line.qty, allow_negative).map_err(|_| {
-            rejected(format!(
-                "lines: not enough stock of {name:?}: {} on hand, {} requested",
-                units(level.qty.milli()),
-                units(line.qty.milli())
-            ))
-        })?;
+        let delta = level
+            .issue(line.qty, allow_negative)
+            .map_err(|e| short_of(name, level.qty, line.qty, e))?;
         ledger.push(warehouse_id, line.product_id, "sale", false, delta)?;
     }
     for (product, qty) in used {
