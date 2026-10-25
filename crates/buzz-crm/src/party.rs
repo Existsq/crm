@@ -107,7 +107,7 @@ fn optional(raw: Option<&str>) -> Option<&str> {
     raw.map(str::trim).filter(|value| !value.is_empty())
 }
 
-fn phone(value: &str) -> Result<String> {
+pub(crate) fn phone(value: &str) -> Result<String> {
     let allowed = value
         .chars()
         .all(|c| c.is_ascii_digit() || matches!(c, '+' | '(' | ')' | '-' | ' '));

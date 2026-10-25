@@ -427,7 +427,14 @@ async fn split_payments_receipts_and_shifts_are_recorded() {
     wrong["payments"][1]["amount_minor"] = json!(6_999);
     reject(
         &cashier,
-        &entity_event(&cashier, KIND_CRM_SALE, channel, Uuid::new_v4(), &wrong, None),
+        &entity_event(
+            &cashier,
+            KIND_CRM_SALE,
+            channel,
+            Uuid::new_v4(),
+            &wrong,
+            None,
+        ),
         400,
         "invalid:",
     )
@@ -456,7 +463,10 @@ async fn split_payments_receipts_and_shifts_are_recorded() {
                                "fn_number": "9999078900004792",
                                "document_datetime": "2026-10-25T10:00:00+00:00"}})
             .to_string(),
-            vec![tag(&["h", &channel.to_string()]), tag(&["crm-id", &sale_id.to_string()])],
+            vec![
+                tag(&["h", &channel.to_string()]),
+                tag(&["crm-id", &sale_id.to_string()]),
+            ],
         )
     };
     // Bots may not record fiscal documents; totals must match the sale.
@@ -477,9 +487,17 @@ async fn split_payments_receipts_and_shifts_are_recorded() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|b| (b["key"].as_str().unwrap().to_string(), b["revenue_minor"].as_i64().unwrap()))
+        .map(|b| {
+            (
+                b["key"].as_str().unwrap().to_string(),
+                b["revenue_minor"].as_i64().unwrap(),
+            )
+        })
         .collect();
-    assert_eq!(payments, vec![("cash".into(), 20_000), ("card".into(), 7_000)]);
+    assert_eq!(
+        payments,
+        vec![("cash".into(), 20_000), ("card".into(), 7_000)]
+    );
 
     accept(&cashier, &shift("close", 3)).await;
     let (status, shifts) = get(&cashier, "/crm/shifts").await;

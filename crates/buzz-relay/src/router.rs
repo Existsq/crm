@@ -331,6 +331,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(api::crm::sales::SALES_PATH, get(api::crm::sales::list))
         .route(api::crm::sales::SALE_PATH, get(api::crm::sales::get))
         .route(api::crm::sales::SHIFTS_PATH, get(api::crm::sales::shifts))
+        .route(api::crm::staff::STAFF_PATH, get(api::crm::staff::list))
+        .route(api::crm::staff::STAFF_MEMBER_PATH, get(api::crm::staff::get))
+        .route(api::crm::staff::SCHEDULE_PATH, get(api::crm::staff::schedule))
         .route(
             api::crm::sales::ANALYTICS_PATH,
             get(api::crm::sales::analytics),

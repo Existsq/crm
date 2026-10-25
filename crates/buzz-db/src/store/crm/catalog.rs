@@ -44,6 +44,8 @@ pub struct ProductWrite<'a> {
     pub min_stock_milli: i64,
     /// Whether the goods need a marking code.
     pub requires_marking: bool,
+    /// Booking duration of a service, in minutes.
+    pub duration_min: Option<i32>,
     /// Archive the product.
     pub archived: bool,
     /// Event producing this revision.
@@ -96,6 +98,8 @@ pub struct CrmProductRecord {
     pub min_stock_milli: i64,
     /// Whether the goods need a marking code.
     pub requires_marking: bool,
+    /// Booking duration of a service, in minutes.
+    pub duration_min: Option<i32>,
     /// Whether the product is archived.
     pub archived: bool,
     /// Id of the event that produced the current row.
@@ -114,6 +118,8 @@ pub struct ProductQuery {
     pub barcode: Option<String>,
     /// Include archived products.
     pub include_archived: bool,
+    /// Only bookable services and work (`Some(true)`) or only the rest.
+    pub services: Option<bool>,
     /// Keyset cursor: the id of the last product of the previous page.
     pub after: Option<Uuid>,
     /// Page size (clamped to 1..=[`MAX_PRODUCT_PAGE`]).
@@ -202,9 +208,9 @@ pub async fn write_product(
                 "INSERT INTO crm_products \
                      (community_id, product_id, space_channel_id, name, sku, unit, price_minor, \
                       vat, payment_object, category, min_stock_milli, requires_marking, \
-                      archived_at, revision_event_id, created_by) \
+                      archived_at, revision_event_id, duration_min, created_by) \
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, \
-                         CASE WHEN $13 THEN now() END, $14, $15) \
+                         CASE WHEN $13 THEN now() END, $14, $15, $16) \
                  ON CONFLICT (community_id, product_id) DO NOTHING",
             ),
             community,
@@ -221,7 +227,7 @@ pub async fn write_product(
                      payment_object = $9, category = $10, min_stock_milli = $11, \
                      requires_marking = $12, \
                      archived_at = CASE WHEN $13 THEN COALESCE(archived_at, now()) END, \
-                     revision_event_id = $14, updated_at = now() \
+                     revision_event_id = $14, duration_min = $15, updated_at = now() \
                  WHERE community_id = $1 AND product_id = $2 AND space_channel_id = $3",
             ),
             community,
@@ -266,7 +272,7 @@ pub async fn write_product(
 
 type PgQuery<'q> = sqlx::query::Query<'q, Postgres, sqlx::postgres::PgArguments>;
 
-/// Bind `$1..$14` shared by the product insert and update.
+/// Bind `$1..$15` shared by the product insert and update.
 fn bind_product_fields<'q>(
     query: PgQuery<'q>,
     community: CommunityId,
@@ -287,6 +293,7 @@ fn bind_product_fields<'q>(
         .bind(write.requires_marking)
         .bind(write.archived)
         .bind(write.revision_event_id)
+        .bind(write.duration_min)
 }
 
 /// Map a unique violation raised by a concurrent writer to `outcome`; any
@@ -309,7 +316,7 @@ fn unique_violation(
 macro_rules! product_columns {
     () => {
         "p.product_id, p.name, p.sku, p.unit, p.price_minor, p.vat, p.payment_object, \
-         p.category, p.min_stock_milli, p.requires_marking, \
+         p.category, p.min_stock_milli, p.requires_marking, p.duration_min, \
          p.archived_at IS NOT NULL AS archived, p.revision_event_id, p.updated_at, \
          COALESCE((SELECT array_agg(b.barcode ORDER BY b.position) FROM crm_product_barcodes b \
                    WHERE b.community_id = p.community_id AND b.product_id = p.product_id), \
@@ -365,6 +372,7 @@ pub async fn list_products(
            AND ($6::uuid IS NULL OR (lower(p.name), p.product_id) > ( \
                 SELECT lower(c.name), c.product_id FROM crm_products c \
                 WHERE c.community_id = $1 AND c.product_id = $6)) \
+           AND ($8::bool IS NULL OR $8 = (p.payment_object IN ('service', 'job'))) \
          ORDER BY lower(p.name), p.product_id \
          LIMIT $7"
     );
@@ -376,6 +384,7 @@ pub async fn list_products(
         .bind(barcode)
         .bind(query.after)
         .bind(limit + 1)
+        .bind(query.services)
         .fetch_all(pool)
         .await?;
     let mut products = rows
@@ -426,6 +435,7 @@ fn product_from_row(row: sqlx::postgres::PgRow) -> Result<CrmProductRecord> {
         category: row.try_get("category")?,
         min_stock_milli: row.try_get("min_stock_milli")?,
         requires_marking: row.try_get("requires_marking")?,
+        duration_min: row.try_get("duration_min")?,
         archived: row.try_get("archived")?,
         revision_event_id: row.try_get("revision_event_id")?,
         updated_at: row.try_get("updated_at")?,

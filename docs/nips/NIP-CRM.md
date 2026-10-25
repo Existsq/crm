@@ -116,6 +116,45 @@ not carry `default_warehouse`.
 - Clearing `is_default` on the current default, or archiving it, is rejected with
   `invalid: make another warehouse the default first`.
 
+### `42131` — Staff member
+
+The people clients book. Authorized like catalog edits.
+
+```json
+{
+  "kind": 42131,
+  "tags": [["h", "<space channel>"], ["crm-id", "<staff uuid>"]],
+  "content": "{\"v\":1,\"name\":\"Ольга\",\"position\":\"Барбер\",\"service_ids\":[\"<product uuid>\"],\"archived\":false}"
+}
+```
+
+- Create and CAS update follow the warehouse rules (`crm-id`,
+  `expected-revision`).
+- `service_ids` (at most 200, duplicates dropped) must name products of the
+  space whose `payment_object` is `service` or `job`; otherwise `invalid:`.
+- Optional `phone`, and `member`: the hex pubkey of the channel member who works
+  as this staff member.
+- Bookable products may carry `duration_min` (5–720, a multiple of 5) on
+  kind `42102`; goods may not.
+
+### `42132` — Staff working days
+
+Sets the working hours of the listed days of one staff member; days not listed
+keep their hours. It has no `crm-id`.
+
+```json
+{
+  "kind": 42132,
+  "tags": [["h", "<space channel>"]],
+  "content": "{\"v\":1,\"staff_id\":\"<staff uuid>\",\"days\":[{\"date\":\"2026-11-02\",\"intervals\":[{\"start\":\"09:00\",\"end\":\"13:00\"},{\"start\":\"14:00\",\"end\":\"20:00\"}]}]}"
+}
+```
+
+- 1–93 distinct days per event; an empty `intervals` list is a day off.
+- Intervals are `HH:MM` on a 5-minute grid (`24:00` allowed as an end), at most
+  4 per day, sorted and non-overlapping.
+- Archived or unknown staff are `invalid:`.
+
 ## Relay responses
 
 | Situation | `OK` message | HTTP bridge |
@@ -146,6 +185,14 @@ not carry `default_warehouse`.
   "my_role", "capabilities": [...], "warehouses": [{"id", "name", "is_default",
   "archived", "revision"}]}`. Archived warehouses are listed only with
   `?archived=true` (used to restore one).
+
+`GET /crm/staff` lists `{"staff": [{"id", "name", "position", "phone",
+"service_ids", "member", "archived", "revision", …}]}` (`?archived=true` adds
+archived staff); `GET /crm/staff/{id}` returns one. `GET
+/crm/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD` (at most 93 days) returns
+`{"from", "to", "days": [{"staff_id", "date", "intervals": [{"start", "end"}]}]}`
+with interval bounds in minutes after midnight. `GET /crm/products` takes
+`kind=services` or `kind=goods`.
 
 Unauthenticated requests get 401; when relay membership is required, callers
 who are not relay members get 403 `relay_membership_required`.

@@ -135,6 +135,8 @@ struct CurrentProduct {
     min_stock_milli: Qty,
     requires_marking: bool,
     archived: bool,
+    #[serde(default)]
+    duration_min: Option<u32>,
     revision: String,
 }
 
@@ -198,6 +200,7 @@ fn new_product(
         min_stock_milli: Qty::ZERO,
         requires_marking: false,
         archived: false,
+        duration_min: None,
         revision: String::new(),
     };
     merge_product(base, fields, None)
@@ -252,6 +255,11 @@ fn merge_product(
         },
         requires_marking: fields.requires_marking.unwrap_or(current.requires_marking),
         archived: archived.unwrap_or(current.archived),
+        duration_min: match fields.duration {
+            Some(0) => None,
+            Some(minutes) => Some(minutes),
+            None => current.duration_min,
+        },
     })
 }
 

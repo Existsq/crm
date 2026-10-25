@@ -27,6 +27,7 @@ use crate::{
 pub mod parties;
 pub mod products;
 pub mod sales;
+pub mod staff;
 
 /// Route path of the space read.
 pub const SPACE_PATH: &str = "/crm/space";

@@ -354,6 +354,10 @@ pub const KIND_CRM_SALE_VOID: u32 = 42105;
 pub const KIND_CRM_FISCAL_RECEIPT: u32 = 42120;
 /// CRM cash-register shift opened or closed on a ККМ.
 pub const KIND_CRM_CASH_SHIFT: u32 = 42121;
+/// CRM staff member revision (who clients book; create, edit, archive).
+pub const KIND_CRM_STAFF: u32 = 42131;
+/// CRM staff working days (sets the hours of the listed dates).
+pub const KIND_CRM_STAFF_SCHEDULE: u32 = 42132;
 
 // NIP-29 group admin events
 /// NIP-29: Add a user to a group.
@@ -696,6 +700,8 @@ pub const ALL_KINDS: &[u32] = &[
     KIND_CRM_SALE_VOID,
     KIND_CRM_FISCAL_RECEIPT,
     KIND_CRM_CASH_SHIFT,
+    KIND_CRM_STAFF,
+    KIND_CRM_STAFF_SCHEDULE,
     KIND_NIP29_PUT_USER,
     KIND_NIP29_REMOVE_USER,
     KIND_NIP29_EDIT_METADATA,
@@ -945,6 +951,7 @@ const _: () = assert!(is_crm_kind(KIND_CRM_PRODUCT));
 const _: () = assert!(is_crm_kind(KIND_CRM_PARTY) && is_crm_kind(KIND_CRM_SALE));
 const _: () = assert!(is_crm_kind(KIND_CRM_SALE_VOID));
 const _: () = assert!(is_crm_kind(KIND_CRM_FISCAL_RECEIPT) && is_crm_kind(KIND_CRM_CASH_SHIFT));
+const _: () = assert!(is_crm_kind(KIND_CRM_STAFF) && is_crm_kind(KIND_CRM_STAFF_SCHEDULE));
 const _: () = assert!(!is_crm_kind(KIND_PRODUCT_FEEDBACK));
 
 // Moderation kinds fit u16 and are neither replaceable nor ephemeral:

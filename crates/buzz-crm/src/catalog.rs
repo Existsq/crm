@@ -14,6 +14,10 @@ pub const MAX_BARCODES: usize = 20;
 pub const MAX_SKU_CHARS: usize = 64;
 /// Maximum category length in characters.
 pub const MAX_CATEGORY_CHARS: usize = 64;
+/// Longest bookable service, in minutes (12 hours).
+pub const MAX_DURATION_MIN: u32 = 720;
+/// Booking grid step: service durations are whole multiples of it.
+pub const DURATION_STEP_MIN: u32 = 5;
 
 /// Unit of measure a product is sold in.
 ///
@@ -159,6 +163,9 @@ pub struct ProductPayload {
     /// Archived products are hidden from lists and cannot be sold.
     #[serde(default)]
     pub archived: bool,
+    /// How long the service takes, for booking; only on services and work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_min: Option<u32>,
 }
 
 impl ProductPayload {
@@ -183,6 +190,9 @@ impl ProductPayload {
         payload
             .unit
             .check_qty(payload.min_stock_milli, "min_stock_milli")?;
+        if let Some(duration) = payload.duration_min {
+            check_duration(duration, payload.payment_object)?;
+        }
         if payload.vat.is_historical() {
             return Err(CrmError::field(
                 "vat",
@@ -191,6 +201,29 @@ impl ProductPayload {
         }
         Ok(payload)
     }
+}
+
+/// Whether a product of this fiscal type can be booked by time.
+pub const fn bookable(object: PaymentObject) -> bool {
+    matches!(object, PaymentObject::Service | PaymentObject::Job)
+}
+
+fn check_duration(duration: u32, object: PaymentObject) -> Result<()> {
+    if !bookable(object) {
+        return Err(CrmError::field(
+            "duration_min",
+            "only services and work have a duration",
+        ));
+    }
+    if duration == 0 || duration > MAX_DURATION_MIN || !duration.is_multiple_of(DURATION_STEP_MIN) {
+        return Err(CrmError::field(
+            "duration_min",
+            format!(
+                "must be {DURATION_STEP_MIN}–{MAX_DURATION_MIN} minutes in steps of {DURATION_STEP_MIN}"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Trimmed SKU, or `None` when blank.
@@ -356,6 +389,33 @@ mod tests {
         value["unit"] = json!("kilogram");
         value["min_stock_milli"] = json!(1500);
         assert!(ProductPayload::parse(&value.to_string()).is_ok());
+    }
+
+    #[test]
+    fn services_carry_a_bookable_duration() {
+        let mut value = base();
+        value["payment_object"] = json!("service");
+        value["unit"] = json!("service_unit");
+        value["min_stock_milli"] = json!(0);
+        value["duration_min"] = json!(90);
+        let service = ProductPayload::parse(&value.to_string()).unwrap();
+        assert_eq!(service.duration_min, Some(90));
+        for bad in [0, 7, MAX_DURATION_MIN + DURATION_STEP_MIN] {
+            value["duration_min"] = json!(bad);
+            assert!(
+                ProductPayload::parse(&value.to_string()).is_err(),
+                "{bad} minutes"
+            );
+        }
+        // Goods are never booked.
+        let mut goods = base();
+        goods["duration_min"] = json!(30);
+        assert!(ProductPayload::parse(&goods.to_string()).is_err());
+        // Absent stays absent on the wire.
+        let plain = ProductPayload::parse(&base().to_string()).unwrap();
+        assert!(!serde_json::to_string(&plain)
+            .unwrap()
+            .contains("duration_min"));
     }
 
     #[test]

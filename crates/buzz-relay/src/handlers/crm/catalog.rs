@@ -64,6 +64,7 @@ impl PreparedProduct {
             category: payload.category.as_deref(),
             min_stock_milli: payload.min_stock_milli.milli(),
             requires_marking: payload.requires_marking,
+            duration_min: payload.duration_min.map(|m| m as i32),
             archived: payload.archived,
             revision_event_id: event.id.as_bytes(),
             actor: &actor,

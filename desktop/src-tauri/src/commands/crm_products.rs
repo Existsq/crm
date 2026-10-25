@@ -43,6 +43,9 @@ pub struct CrmProductWriteInput {
     pub requires_marking: bool,
     #[serde(default)]
     pub archived: bool,
+    /// Booking duration of a service, in minutes.
+    #[serde(default)]
+    pub duration_min: Option<u32>,
 }
 
 /// `GET /crm/products` as returned by the relay (`{products, next}`).
@@ -143,6 +146,7 @@ fn product_builder(
         min_stock_milli: input.min_stock_milli,
         requires_marking: input.requires_marking,
         archived: input.archived,
+        duration_min: input.duration_min,
     };
     let builder = buzz_sdk_pkg::build_crm_product(channel, product_id, payload, expected_revision)
         .map_err(sdk_error)?;

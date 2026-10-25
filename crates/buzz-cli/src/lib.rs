@@ -413,6 +413,9 @@ pub struct CrmProductFields {
     /// Goods that need a marking code (the v1 POS refuses them)
     #[arg(long)]
     pub requires_marking: Option<bool>,
+    /// Booking duration of a service or work in minutes (5–720, steps of 5); 0 clears it
+    #[arg(long)]
+    pub duration: Option<u32>,
 }
 
 #[derive(Subcommand)]

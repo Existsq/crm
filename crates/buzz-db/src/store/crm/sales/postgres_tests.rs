@@ -103,6 +103,7 @@ async fn product(fx: &Fixture, name: &str) -> Uuid {
             category: None,
             min_stock_milli: 0,
             requires_marking: false,
+            duration_min: None,
             archived: false,
             revision_event_id: &revision,
             actor: &fx.actor,
@@ -679,11 +680,15 @@ async fn receipts_and_shifts_are_recorded_once_and_totalled() {
     };
     let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
     assert_eq!(
-        record_shift(&mut tx, fx.community, &shift("open", 1)).await.unwrap(),
+        record_shift(&mut tx, fx.community, &shift("open", 1))
+            .await
+            .unwrap(),
         ShiftOutcome::Recorded
     );
     assert_eq!(
-        record_shift(&mut tx, fx.community, &shift("open", 1)).await.unwrap(),
+        record_shift(&mut tx, fx.community, &shift("open", 1))
+            .await
+            .unwrap(),
         ShiftOutcome::AlreadyRecorded
     );
     tx.commit().await.unwrap();
@@ -706,7 +711,9 @@ async fn receipts_and_shifts_are_recorded_once_and_totalled() {
     };
     let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
     assert_eq!(
-        record_receipt(&mut tx, fx.community, &receipt("sell", 1, 2)).await.unwrap(),
+        record_receipt(&mut tx, fx.community, &receipt("sell", 1, 2))
+            .await
+            .unwrap(),
         ReceiptOutcome::TotalMismatch { expected: 18_000 }
     );
     assert_eq!(
@@ -716,11 +723,15 @@ async fn receipts_and_shifts_are_recorded_once_and_totalled() {
         ReceiptOutcome::NotReturnable
     );
     assert_eq!(
-        record_receipt(&mut tx, fx.community, &receipt("sell", 18_000, 2)).await.unwrap(),
+        record_receipt(&mut tx, fx.community, &receipt("sell", 18_000, 2))
+            .await
+            .unwrap(),
         ReceiptOutcome::Recorded
     );
     assert_eq!(
-        record_receipt(&mut tx, fx.community, &receipt("sell", 18_000, 3)).await.unwrap(),
+        record_receipt(&mut tx, fx.community, &receipt("sell", 18_000, 3))
+            .await
+            .unwrap(),
         ReceiptOutcome::AlreadyRecorded
     );
     tx.commit().await.unwrap();
@@ -737,9 +748,17 @@ async fn receipts_and_shifts_are_recorded_once_and_totalled() {
     assert!(stored.fiscal.sell_return.is_none());
 
     let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
-    void_sale(&mut tx, fx.community, fx.space, sale, &[4; 32], "возврат", &fx.actor)
-        .await
-        .unwrap();
+    void_sale(
+        &mut tx,
+        fx.community,
+        fx.space,
+        sale,
+        &[4; 32],
+        "возврат",
+        &fx.actor,
+    )
+    .await
+    .unwrap();
     // A second receipt cannot reuse the ФН document number.
     assert_eq!(
         record_receipt(&mut tx, fx.community, &receipt("sell_return", 18_000, 2))
@@ -749,19 +768,31 @@ async fn receipts_and_shifts_are_recorded_once_and_totalled() {
     );
     tx.rollback().await.unwrap();
     let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
-    void_sale(&mut tx, fx.community, fx.space, sale, &[4; 32], "возврат", &fx.actor)
-        .await
-        .unwrap();
+    void_sale(
+        &mut tx,
+        fx.community,
+        fx.space,
+        sale,
+        &[4; 32],
+        "возврат",
+        &fx.actor,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         record_receipt(&mut tx, fx.community, &receipt("sell_return", 18_000, 4))
             .await
             .unwrap(),
         ReceiptOutcome::Recorded
     );
-    record_shift(&mut tx, fx.community, &shift("close", 5)).await.unwrap();
+    record_shift(&mut tx, fx.community, &shift("close", 5))
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
 
-    let shifts = list_shifts(&fx.db.pool, fx.community, fx.space, 5).await.unwrap();
+    let shifts = list_shifts(&fx.db.pool, fx.community, fx.space, 5)
+        .await
+        .unwrap();
     assert_eq!(shifts.len(), 1);
     let shift = &shifts[0];
     assert!(shift.closed);

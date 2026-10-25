@@ -34,6 +34,8 @@ pub struct ProductsParams {
     q: Option<String>,
     barcode: Option<String>,
     archived: Option<bool>,
+    /// `services` or `goods`.
+    kind: Option<String>,
     limit: Option<i64>,
     after: Option<Uuid>,
 }
@@ -51,10 +53,17 @@ fn product_query(params: ProductsParams) -> Result<ProductQuery, &'static str> {
     if too_long(&params.q) || too_long(&params.barcode) {
         return Err("q and barcode must be at most 128 characters");
     }
+    let services = match params.kind.as_deref() {
+        None => None,
+        Some("services") => Some(true),
+        Some("goods") => Some(false),
+        Some(_) => return Err("kind must be services or goods"),
+    };
     Ok(ProductQuery {
         q: params.q,
         barcode: params.barcode,
         include_archived: params.archived.unwrap_or(false),
+        services,
         after: params.after,
         limit,
     })
@@ -172,6 +181,7 @@ mod tests {
             category: None,
             min_stock_milli: 0,
             requires_marking: false,
+            duration_min: None,
             archived: false,
             revision_event_id: vec![0xab; 32],
             updated_at: chrono::Utc::now(),

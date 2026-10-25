@@ -2,7 +2,7 @@
 //! catalog lives in [`catalog`] (migration 0051), customers and suppliers in
 //! [`parties`] (0052), sale documents in [`sales`] (0053) and the read-only
 //! [`analytics`] over them; fiscal receipts and cash shifts in [`fiscal`]
-//! (0054).
+//! (0054); staff and their working days in [`staff`] (0055).
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
 //! event and its projection rows commit or roll back together (ADR-0001).
@@ -23,6 +23,7 @@ pub mod catalog;
 pub mod fiscal;
 pub mod parties;
 pub mod sales;
+pub mod staff;
 
 pub use analytics::{AnalyticsPeriod, SalesAnalytics};
 pub use catalog::{
@@ -35,6 +36,10 @@ pub use parties::{
 };
 pub use sales::{
     CrmSaleRecord, SaleInsert, SaleLineInsert, SalePage, SaleQuery, SaleVoidOutcome, MAX_SALE_PAGE,
+};
+pub use staff::{
+    CrmStaffDayRecord, CrmStaffRecord, ScheduleWriteOutcome, StaffDayWrite, StaffWrite,
+    StaffWriteOutcome, MAX_SCHEDULE_RANGE_DAYS,
 };
 
 /// Channel facts needed to decide whether a channel can host a CRM space.

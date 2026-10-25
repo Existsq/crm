@@ -6,12 +6,13 @@
 
 use buzz_core::kind::{
     KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE,
-    KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE,
+    KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
+    KIND_CRM_WAREHOUSE,
 };
 use buzz_crm::{
     space::PAYLOAD_VERSION, tags, CashShiftPayload, FiscalReceiptPayload, PartyPayload,
-    ProductPayload, SalePayload, SaleVoidPayload, SpacePayload, SpaceSettings, WarehousePayload,
-    WarehouseSeed,
+    ProductPayload, SalePayload, SaleVoidPayload, SchedulePayload, SpacePayload, SpaceSettings,
+    StaffPayload, WarehousePayload, WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -235,6 +236,48 @@ pub fn build_crm_cash_shift(
     )
 }
 
+/// Build the kind 42131 event that creates or updates staff member `staff_id`.
+///
+/// Pass `expected_revision` (the current revision event id) to update; omit
+/// it to create.
+pub fn build_crm_staff(
+    channel_id: Uuid,
+    staff_id: Uuid,
+    mut payload: StaffPayload,
+    expected_revision: Option<&str>,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = StaffPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let mut event_tags = vec![
+        tag(&["h", &channel_id.to_string()])?,
+        tag(&[tags::TAG_CRM_ID, &staff_id.to_string()])?,
+    ];
+    if let Some(revision) = expected_revision {
+        event_tags.push(revision_tag(revision)?);
+    }
+    Ok(EventBuilder::new(Kind::Custom(KIND_CRM_STAFF as u16), content).tags(event_tags))
+}
+
+/// Build the kind 42132 event that sets working hours for the listed days of
+/// one staff member. Days not listed keep their hours.
+pub fn build_crm_staff_schedule(
+    channel_id: Uuid,
+    mut payload: SchedulePayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = SchedulePayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_STAFF_SCHEDULE as u16), content)
+            .tags([tag(&["h", &channel_id.to_string()])?]),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,6 +354,7 @@ mod tests {
             min_stock_milli: buzz_crm::Qty::ZERO,
             requires_marking: false,
             archived: false,
+            duration_min: None,
         }
     }
 
@@ -375,6 +419,49 @@ mod tests {
         let parsed = PartyPayload::parse(&event.content).unwrap();
         assert_eq!(parsed.name, "Мария");
         assert_eq!(parsed.phone.as_deref(), Some("+7 912 000-11-22"));
+    }
+
+    #[test]
+    fn staff_and_schedule_builders_validate_and_tag() {
+        let channel = Uuid::new_v4();
+        let staff_id = Uuid::new_v4();
+        let staff = |name: &str| StaffPayload {
+            v: 0,
+            name: name.into(),
+            position: Some(" Barber ".into()),
+            phone: None,
+            service_ids: Vec::new(),
+            member: None,
+            archived: false,
+        };
+        assert!(build_crm_staff(channel, staff_id, staff(""), None).is_err());
+        let event = build_crm_staff(channel, staff_id, staff(" Olga "), None)
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_STAFF);
+        assert_eq!(tag_values(&event, "crm-id"), vec![staff_id.to_string()]);
+        let parsed = StaffPayload::parse(&event.content).unwrap();
+        assert_eq!(parsed.name, "Olga");
+        assert_eq!(parsed.position.as_deref(), Some("Barber"));
+
+        let day = |start: u16, end: u16| buzz_crm::ScheduleDay {
+            date: "2026-11-02".into(),
+            intervals: vec![buzz_crm::WorkInterval { start, end }],
+        };
+        let schedule = |days| SchedulePayload {
+            v: 0,
+            staff_id,
+            days,
+        };
+        assert!(build_crm_staff_schedule(channel, schedule(vec![day(600, 540)])).is_err());
+        let event = build_crm_staff_schedule(channel, schedule(vec![day(540, 1260)]))
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_STAFF_SCHEDULE);
+        assert_eq!(tag_values(&event, "h"), vec![channel.to_string()]);
+        assert!(event.content.contains("\"09:00\""));
     }
 
     #[test]
