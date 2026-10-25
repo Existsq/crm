@@ -112,6 +112,7 @@ export const ru = {
     searchLabel: "Поиск товаров",
     searchPlaceholder: "Название или артикул",
     showArchived: "Показать архивные",
+    reloadLatest: "Загрузить актуальные данные",
     add: "Добавить товар",
     tableLabel: "Каталог товаров",
     columns: {

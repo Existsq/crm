@@ -15,10 +15,12 @@ import type {
 } from "@/shared/api/tauriCrm";
 
 import {
+  editMockCrmProductElsewhere,
   handleCrmProductMockCommand,
   type MockCrmProductSeed,
   seedMockCrmProducts,
 } from "./e2eBridgeCrmProducts.ts";
+import { KIND_CRM_PRODUCT } from "@/features/crm/lib/crmKinds";
 
 type RawSettings = Extract<RawCrmSpace, { member: true }>["settings"];
 
@@ -61,6 +63,12 @@ export type MockCrmSeed = {
 declare global {
   interface Window {
     __BUZZ_E2E_SEED_CRM__?: (seed: MockCrmSeed) => void;
+    /** Whether the CRM view's live subscription to the space is open. */
+    __BUZZ_E2E_CRM_LIVE_READY__?: () => boolean;
+    __BUZZ_E2E_CRM_EDIT_PRODUCT_ELSEWHERE__?: (edit: {
+      productId: string;
+      patch: Parameters<typeof editMockCrmProductElsewhere>[1];
+    }) => void;
   }
 }
 
@@ -324,15 +332,77 @@ export function handleCrmMockCommand(
           writeWarehouse(payload as WriteWarehousePayload),
         ),
       };
-    default:
-      return handleCrmProductMockCommand(command, payload, {
+    default: {
+      const result = handleCrmProductMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,
       });
+      return result && command === "crm_write_product"
+        ? { value: loseResponseIfArmed(result.value) }
+        : result;
+    }
   }
 }
 
-export function installCrmMockSeedHook(): void {
+/** Delivers a relay event to live subscriptions on `channelId`. */
+type MockLiveEmitter = (
+  channelId: string,
+  event: {
+    id: string;
+    pubkey: string;
+    created_at: number;
+    kind: number;
+    tags: string[][];
+    content: string;
+    sig: string;
+  },
+) => void;
+
+/** Whether a live subscription covers `channelId` for `kind`. */
+type MockLiveProbe = (channelId: string, kind: number) => boolean;
+
+let emitLive: MockLiveEmitter | null = null;
+let hasLive: MockLiveProbe | null = null;
+
+/**
+ * Simulate another client saving a product: the mock row gets a new revision
+ * and a kind 42102 event reaches the space channel's live subscriptions, the
+ * same path that invalidates CRM queries in production.
+ */
+function editProductElsewhere({
+  productId,
+  patch,
+}: {
+  productId: string;
+  patch: Parameters<typeof editMockCrmProductElsewhere>[1];
+}): void {
+  const space = state.space;
+  if (!space || !editMockCrmProductElsewhere(productId, patch)) {
+    throw new Error(`Mock CRM product ${productId} not found.`);
+  }
+  emitLive?.(space.channelId, {
+    id: revision(),
+    pubkey: "0".repeat(64),
+    created_at: Math.floor(Date.now() / 1000),
+    kind: KIND_CRM_PRODUCT,
+    tags: [
+      ["h", space.channelId],
+      ["crm-id", productId],
+    ],
+    content: "{}",
+    sig: "0".repeat(128),
+  });
+}
+
+export function installCrmMockSeedHook(
+  emit?: MockLiveEmitter,
+  probe?: MockLiveProbe,
+): void {
+  emitLive = emit ?? null;
+  hasLive = probe ?? null;
   resetMockCrm();
   window.__BUZZ_E2E_SEED_CRM__ = seedMockCrm;
+  window.__BUZZ_E2E_CRM_EDIT_PRODUCT_ELSEWHERE__ = editProductElsewhere;
+  window.__BUZZ_E2E_CRM_LIVE_READY__ = () =>
+    Boolean(state.space && hasLive?.(state.space.channelId, KIND_CRM_PRODUCT));
 }

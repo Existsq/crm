@@ -63,8 +63,11 @@ export type CrmProductListFilter = {
 
 export type CrmProductWriteInput = CrmProductFields & {
   channelId: string;
-  /** `null` creates a new product. */
-  productId: string | null;
+  /**
+   * Product id. For a create, pick it once when the dialog opens
+   * (`crypto.randomUUID()`) so a retry cannot create a duplicate.
+   */
+  productId: string;
   /** Current revision; required for updates, `null` for creation. */
   expectedRevision: string | null;
 };

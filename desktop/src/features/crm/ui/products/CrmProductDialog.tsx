@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { ru } from "@/features/crm/i18n/ru";
+import { describeCrmError } from "@/features/crm/lib/crmErrors";
 import {
   emptyProductDraft,
   PRODUCT_DRAFT_FIELDS,
@@ -36,6 +37,7 @@ export function CrmProductDialog({
   defaultVat,
   error,
   onCloseAutoFocus,
+  onDismissError,
   onOpenChange,
   onSubmit,
   open,
@@ -46,8 +48,11 @@ export function CrmProductDialog({
   error: unknown;
   /** Where focus goes on close (the dialog has no Radix trigger). */
   onCloseAutoFocus: (event: Event) => void;
+  /** Clear the relay error (after reloading the latest product). */
+  onDismissError: () => void;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (fields: CrmProductFields) => void;
+  /** `expectedRevision` is the revision the draft is based on (`null`: create). */
+  onSubmit: (fields: CrmProductFields, expectedRevision: string | null) => void;
   open: boolean;
   pending: boolean;
   /** Live product being edited, `null` to create one. */
@@ -65,13 +70,27 @@ export function CrmProductDialog({
   // mousedown and click, swallowing the click.
   const [submitted, setSubmitted] = React.useState(false);
 
-  // Adopt a product changed elsewhere unless the user has unsaved edits
-  // (same baseline/draft rule as the settings form).
-  if (product && product.revision !== baseRevision) {
-    const next = productDraftFrom(product);
-    setBaseRevision(product.revision);
+  // Adopt a product changed elsewhere unless the user has unsaved edits. With
+  // edits, the draft keeps its base revision so saving is a conflict rather
+  // than a silent overwrite of the other change.
+  if (
+    product &&
+    product.revision !== baseRevision &&
+    sameProductDraft(draft, baseline)
+  ) {
+    adopt(product);
+  }
+  const conflicted =
+    product !== null &&
+    product.revision !== baseRevision &&
+    error !== null &&
+    describeCrmError(error).kind === "conflict";
+
+  function adopt(latest: CrmProduct) {
+    const next = productDraftFrom(latest);
+    setBaseRevision(latest.revision);
     setBaseline(next);
-    if (sameProductDraft(draft, baseline)) setDraft(next);
+    setDraft(next);
   }
 
   const validation = validateProductDraft(draft);
@@ -91,7 +110,7 @@ export function CrmProductDialog({
       }
       return;
     }
-    onSubmit(validation.fields);
+    onSubmit(validation.fields, baseRevision);
   }
 
   return (
@@ -124,6 +143,19 @@ export function CrmProductDialog({
           </div>
           <CrmErrorAlert error={error} testId="crm-product-dialog-error" />
           <DialogFooter>
+            {conflicted && product ? (
+              <Button
+                data-testid="crm-product-dialog-reload"
+                onClick={() => {
+                  onDismissError();
+                  adopt(product);
+                }}
+                type="button"
+                variant="outline"
+              >
+                {ru.products.reloadLatest}
+              </Button>
+            ) : null}
             <Button
               onClick={() => onOpenChange(false)}
               type="button"
@@ -133,7 +165,7 @@ export function CrmProductDialog({
             </Button>
             <Button
               data-testid="crm-product-dialog-submit"
-              disabled={pending}
+              disabled={pending || conflicted}
               type="submit"
             >
               {pending ? ru.common.saving : ru.common.save}

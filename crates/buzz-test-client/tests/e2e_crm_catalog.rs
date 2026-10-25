@@ -90,7 +90,7 @@ async fn space(pool: &sqlx::PgPool) -> (Keys, Uuid, Uuid) {
 }
 
 #[tokio::test]
-#[ignore = "requires a running relay and its Postgres"]
+#[ignore = "requires a running relay"]
 async fn products_are_created_updated_and_kept_unique() {
     let pool = pool().await;
     let (owner, channel, community) = space(&pool).await;
@@ -307,7 +307,7 @@ async fn products_are_created_updated_and_kept_unique() {
 }
 
 #[tokio::test]
-#[ignore = "requires a running relay and its Postgres"]
+#[ignore = "requires a running relay"]
 async fn products_are_searched_paginated_archived_and_member_only() {
     let pool = pool().await;
     let (owner, channel, community) = space(&pool).await;

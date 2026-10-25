@@ -23,9 +23,10 @@ const MAX_PRODUCTS_PAGE: u32 = 200;
 #[derive(Debug, Clone, Deserialize)]
 pub struct CrmProductWriteInput {
     pub channel_id: String,
-    /// `None` creates a new product with a fresh id.
-    pub product_id: Option<String>,
-    /// Required when `product_id` is set.
+    /// Product id. For a create the client picks it once per dialog, so a
+    /// retry after a lost response cannot create a second product.
+    pub product_id: String,
+    /// Current revision for an update; `None` creates the product.
     pub expected_revision: Option<String>,
     pub name: String,
     pub sku: Option<String>,
@@ -127,17 +128,8 @@ fn product_builder(
     input: CrmProductWriteInput,
 ) -> Result<(nostr::EventBuilder, uuid::Uuid), String> {
     let channel = parse_uuid(&input.channel_id, "channel id")?;
-    let (product_id, expected_revision) = match (
-        input.product_id.as_deref(),
-        input.expected_revision.as_deref(),
-    ) {
-        (None, None) => (uuid::Uuid::new_v4(), None),
-        (Some(id), Some(revision)) => (parse_uuid(id, "product id")?, Some(revision)),
-        (None, Some(_)) => return Err("invalid: a new product cannot carry a revision".to_string()),
-        (Some(_), None) => {
-            return Err("invalid: updating a product needs its current revision".to_string())
-        }
-    };
+    let product_id = parse_uuid(&input.product_id, "product id")?;
+    let expected_revision = input.expected_revision.as_deref();
     let payload = ProductPayload {
         v: 1,
         name: input.name,
@@ -162,7 +154,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn input(product_id: Option<&str>, revision: Option<&str>) -> CrmProductWriteInput {
+    fn input(product_id: &str, revision: Option<&str>) -> CrmProductWriteInput {
         serde_json::from_value(json!({
             "channel_id": uuid::Uuid::new_v4().to_string(),
             "product_id": product_id,
@@ -189,11 +181,13 @@ mod tests {
     }
 
     #[test]
-    fn create_gets_a_fresh_id_and_normalized_content() {
-        let (builder, id) = product_builder(input(None, None)).unwrap();
+    fn create_uses_the_client_id_and_normalized_content() {
+        let id = uuid::Uuid::new_v4().to_string();
+        let (builder, built_id) = product_builder(input(&id, None)).unwrap();
         let event = builder.sign_with_keys(&nostr::Keys::generate()).unwrap();
         assert_eq!(event.kind.as_u16(), 42102);
-        assert_eq!(tag(&event, "crm-id"), Some(id.to_string()));
+        assert_eq!(built_id.to_string(), id);
+        assert_eq!(tag(&event, "crm-id"), Some(id));
         assert_eq!(tag(&event, "expected-revision"), None);
         let content: Value = serde_json::from_str(&event.content).unwrap();
         assert_eq!(content["v"], 1);
@@ -208,7 +202,7 @@ mod tests {
     fn update_keeps_id_and_carries_revision() {
         let id = uuid::Uuid::new_v4().to_string();
         let revision = "ab".repeat(32);
-        let (builder, built_id) = product_builder(input(Some(&id), Some(&revision))).unwrap();
+        let (builder, built_id) = product_builder(input(&id, Some(&revision))).unwrap();
         let event = builder.sign_with_keys(&nostr::Keys::generate()).unwrap();
         assert_eq!(built_id.to_string(), id);
         assert_eq!(tag(&event, "crm-id"), Some(id));
@@ -216,21 +210,20 @@ mod tests {
     }
 
     #[test]
-    fn mismatched_id_and_revision_are_rejected() {
-        let revision = "ab".repeat(32);
+    fn malformed_ids_and_revisions_are_rejected() {
         let id = uuid::Uuid::new_v4().to_string();
-        assert!(product_builder(input(None, Some(&revision))).is_err());
-        assert!(product_builder(input(Some(&id), None)).is_err());
-        assert!(product_builder(input(Some("not-a-uuid"), Some(&revision))).is_err());
+        assert!(product_builder(input("not-a-uuid", None)).is_err());
+        assert!(product_builder(input(&id, Some("not-hex"))).is_err());
     }
 
     #[test]
     fn invalid_payloads_surface_as_invalid_errors() {
-        let mut fractional_piece = input(None, None);
+        let id = uuid::Uuid::new_v4().to_string();
+        let mut fractional_piece = input(&id, None);
         fractional_piece.min_stock_milli = Qty::from_milli(1500).unwrap();
-        let mut historical_vat = input(None, None);
+        let mut historical_vat = input(&id, None);
         historical_vat.vat = VatRate::Vat20;
-        let mut bad_barcode = input(None, None);
+        let mut bad_barcode = input(&id, None);
         bad_barcode.barcodes = vec!["4600051000058".to_string()];
         for bad in [fractional_piece, historical_vat, bad_barcode] {
             let error = product_builder(bad).unwrap_err();
@@ -243,6 +236,7 @@ mod tests {
         // Optional fields may be omitted entirely by the caller.
         let parsed: CrmProductWriteInput = serde_json::from_value(json!({
             "channel_id": uuid::Uuid::new_v4().to_string(),
+            "product_id": uuid::Uuid::new_v4().to_string(),
             "name": "x",
             "unit": "piece",
             "price_minor": -1,

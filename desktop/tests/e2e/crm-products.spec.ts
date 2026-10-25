@@ -304,3 +304,67 @@ test("long catalogs load the next page on demand", async ({ page }) => {
   await expect(rows.last()).toContainText("Товар 55");
   await expect(page.getByTestId("crm-products-load-more")).toHaveCount(0);
 });
+
+test("an edit that meets a newer revision is a conflict with a way back", async ({
+  page,
+}) => {
+  await openCatalog(page, seed("member"));
+  await page
+    .getByRole("button", { name: "Изменить: Хлеб бородинский" })
+    .click();
+  const dialog = page.getByTestId("crm-product-dialog");
+  await waitForAnimations(page);
+  const price = dialog.getByLabel("Цена за единицу, ₽");
+  await price.fill("72,5");
+
+  // Another cashier saves the product; the live CRM event refetches it while
+  // this dialog is open with unsaved edits.
+  await page.waitForFunction(() => window.__BUZZ_E2E_CRM_LIVE_READY__?.());
+  await page.evaluate(
+    (productId) =>
+      window.__BUZZ_E2E_CRM_EDIT_PRODUCT_ELSEWHERE__?.({
+        productId,
+        patch: { price_minor: 7000 },
+      }),
+    BREAD,
+  );
+  await expect(row(page, "Хлеб бородинский")).toContainText("70,00 ₽");
+  await expect(price).toHaveValue("72,5");
+
+  // Saving must not overwrite the other change.
+  await dialog.getByTestId("crm-product-dialog-submit").click();
+  await expect(dialog.getByTestId("crm-product-dialog-error")).toContainText(
+    "Данные изменились",
+  );
+  await expect(dialog.getByTestId("crm-product-dialog-submit")).toBeDisabled();
+
+  await dialog.getByTestId("crm-product-dialog-reload").click();
+  await expect(price).toHaveValue("70,00");
+  await expect(dialog.getByTestId("crm-product-dialog-error")).toHaveCount(0);
+  await price.fill("75");
+  await dialog.getByTestId("crm-product-dialog-submit").click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row(page, "Хлеб бородинский")).toContainText("75,00 ₽");
+});
+
+test("a create retried after a lost response is not duplicated", async ({
+  page,
+}) => {
+  await openCatalog(page, {
+    ...seed("owner", []),
+    loseNextWriteResponse: true,
+  });
+  const dialog = await openCreateDialog(page);
+  await dialog.getByLabel("Название").fill("Кефир 1%");
+  await dialog.getByLabel("Цена за единицу, ₽").fill("99");
+  await dialog.getByTestId("crm-product-dialog-submit").click();
+  // The relay stored the product but the response was lost.
+  await expect(dialog.getByTestId("crm-product-dialog-error")).toBeVisible();
+  await dialog.getByTestId("crm-product-dialog-submit").click();
+  await expect(dialog.getByTestId("crm-product-dialog-error")).toContainText(
+    "Данные изменились",
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(row(page, "Кефир 1%")).toHaveCount(1);
+});

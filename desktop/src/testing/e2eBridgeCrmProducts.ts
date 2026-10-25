@@ -48,7 +48,7 @@ type ListPayload = {
 type WritePayload = {
   input: Omit<RawCrmProduct, "id" | "revision" | "updated_at"> & {
     channel_id: string;
-    product_id: string | null;
+    product_id: string;
     expected_revision: string | null;
   };
 };
@@ -169,21 +169,21 @@ function writeProduct({ input }: WritePayload, access: MockCrmAccess) {
     throw "relay error 400: invalid: this channel is not the CRM space";
   }
   const fields = normalize(input);
-  const current = input.product_id
-    ? products.find((p) => p.id === input.product_id)
-    : undefined;
-  if (input.product_id === null && input.expected_revision !== null) {
-    throw "invalid: a new product cannot carry a revision";
-  }
-  if (input.product_id !== null) {
+  const id = input.product_id;
+  const current = products.find((p) => p.id === id);
+  if (input.expected_revision === null) {
+    if (current) {
+      throw "relay error 409: conflict: product already exists; send expected-revision to update it";
+    }
+  } else {
     if (!current) throw "relay error 409: conflict: product does not exist";
     if (current.revision !== input.expected_revision) {
       throw "relay error 409: conflict: product changed since it was loaded";
     }
   }
-  const id = current?.id ?? crypto.randomUUID();
   const others = products.filter((p) => p.id !== id);
-  if (fields.sku && others.some((p) => p.sku === fields.sku)) {
+  const sku = fields.sku?.toLowerCase();
+  if (sku && others.some((p) => p.sku?.toLowerCase() === sku)) {
     throw `relay error 409: conflict: SKU "${fields.sku}" is already used by another product`;
   }
   for (const code of fields.barcodes) {
@@ -212,6 +212,23 @@ function writeProduct({ input }: WritePayload, access: MockCrmAccess) {
     ? products.map((p) => (p.id === id ? next : p))
     : [...products, next];
   return { event_id: revision, entity_id: id };
+}
+
+/**
+ * Simulate another client saving `productId`: apply `patch` and move the
+ * revision. Returns whether the product exists.
+ */
+export function editMockCrmProductElsewhere(
+  productId: string,
+  patch: Partial<Omit<RawCrmProduct, "id" | "revision">>,
+): boolean {
+  const current = products.find((p) => p.id === productId);
+  if (!current) return false;
+  Object.assign(current, patch, {
+    revision: eventId(),
+    updated_at: new Date().toISOString(),
+  });
+  return true;
 }
 
 /** Handle a catalog command, or `undefined` for anything else. */

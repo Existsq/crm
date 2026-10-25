@@ -31,6 +31,9 @@ type DialogState = {
   session: number;
   /** Product being edited, `null` to create one. */
   product: CrmProduct | null;
+  /** Id written by this dialog: the edited product's, or one chosen at
+   * opening for a create so a retried save cannot create a duplicate. */
+  productId: string;
 };
 
 export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
@@ -44,6 +47,7 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
     open: false,
     session: 0,
     product: null,
+    productId: "",
   });
   const addButtonRef = React.useRef<HTMLButtonElement>(null);
   const returnFocusRef = React.useRef<HTMLElement | null>(null);
@@ -66,16 +70,20 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
       open: true,
       session: current.session + 1,
       product,
+      productId: product?.id ?? crypto.randomUUID(),
     }));
   }
 
-  async function save(fields: CrmProductFields) {
+  async function save(
+    fields: CrmProductFields,
+    expectedRevision: string | null,
+  ) {
     try {
       await write.mutateAsync({
         ...fields,
         channelId: space.channelId,
-        productId: dialogProduct?.id ?? null,
-        expectedRevision: dialogProduct?.revision ?? null,
+        productId: dialog.productId,
+        expectedRevision,
       });
       toast.success(dialogProduct ? ru.products.updated : ru.products.created);
       setDialog((current) => ({ ...current, open: false }));
@@ -235,7 +243,10 @@ export function CrmProductsSection({ space }: { space: CrmMemberSpace }) {
             if (!write.isPending) write.reset();
             setDialog((current) => ({ ...current, open: false }));
           }}
-          onSubmit={(fields) => void save(fields)}
+          onDismissError={() => write.reset()}
+          onSubmit={(fields, expectedRevision) =>
+            void save(fields, expectedRevision)
+          }
           open={dialog.open}
           pending={write.isPending}
           product={dialogProduct}

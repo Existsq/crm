@@ -11882,7 +11882,7 @@ export function maybeInstallE2eTauriMocks() {
     return closed;
   };
 
-  installCrmMockSeedHook();
+  installCrmMockSeedHook(emitMockLiveEvent, hasMockLiveSubscription);
 
   window.__BUZZ_E2E_SEED_MOCK_REMINDERS__ = (reminders) => {
     mockReminderEvents.length = 0;
