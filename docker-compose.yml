@@ -79,6 +79,7 @@ services:
     command: start-dev --http-port=8080
     environment:
       KC_DB: dev-mem
+      KC_HEALTH_ENABLED: "true"
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports:
@@ -86,7 +87,7 @@ services:
     networks:
       - buzz-net
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -101,7 +102,11 @@ services:
     restart: unless-stopped
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # Upstream quay.io/minio and Docker Hub minio repositories deny anonymous
+    # pulls. This image bundles the same MinIO/mc releases (see
+    # .github/ci/minio/). AMD64 only; Apple Silicon runs it under emulation.
+    image: ${MINIO_IMAGE:-ghcr.io/block/buzz-minio:latest}
+    platform: linux/amd64
     container_name: buzz-minio
     command: server /data --console-address ":9001"
     environment:
@@ -130,7 +135,8 @@ services:
     restart: unless-stopped
 
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    image: ${MINIO_IMAGE:-ghcr.io/block/buzz-minio:latest}
+    platform: linux/amd64
     container_name: buzz-minio-init
     depends_on:
       minio:
