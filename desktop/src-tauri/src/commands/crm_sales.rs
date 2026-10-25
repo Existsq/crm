@@ -9,7 +9,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tauri::State;
 
-use buzz_crm_pkg::{PartyPayload, PartyType, PaymentMethod, SaleLine, SalePayload};
+use buzz_crm_pkg::{
+    Money, PartyPayload, PartyType, PaymentMethod, SaleLine, SalePayload, SalePayment,
+};
 
 use super::crm::{parse_uuid, sdk_error, CrmWriteWire};
 use crate::{
@@ -50,6 +52,12 @@ pub struct CrmSaleInput {
     pub warehouse_id: String,
     pub customer_id: Option<String>,
     pub payment: PaymentMethod,
+    /// Split payment parts; empty pays the whole total with `payment`.
+    #[serde(default)]
+    pub payments: Vec<SalePayment>,
+    /// Cash handed over, for the change.
+    #[serde(default)]
+    pub cash_tendered_minor: Option<Money>,
     pub lines: Vec<SaleLine>,
     pub note: Option<String>,
 }
@@ -265,6 +273,8 @@ fn sale_builder(input: CrmSaleInput) -> Result<(nostr::EventBuilder, uuid::Uuid)
             .map(|id| parse_uuid(id, "customer id"))
             .transpose()?,
         payment: input.payment,
+        payments: input.payments,
+        cash_tendered_minor: input.cash_tendered_minor,
         lines: input.lines,
         note: input.note,
     };

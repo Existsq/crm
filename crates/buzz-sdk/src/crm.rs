@@ -5,12 +5,13 @@
 //! for shape reasons. Authorization and CAS checks still happen at the relay.
 
 use buzz_core::kind::{
-    KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE,
-    KIND_CRM_WAREHOUSE,
+    KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE,
+    KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE,
 };
 use buzz_crm::{
-    space::PAYLOAD_VERSION, tags, PartyPayload, ProductPayload, SalePayload, SaleVoidPayload,
-    SpacePayload, SpaceSettings, WarehousePayload, WarehouseSeed,
+    space::PAYLOAD_VERSION, tags, CashShiftPayload, FiscalReceiptPayload, PartyPayload,
+    ProductPayload, SalePayload, SaleVoidPayload, SpacePayload, SpaceSettings, WarehousePayload,
+    WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -200,6 +201,40 @@ pub fn build_crm_sale_void(
     )
 }
 
+/// Build the kind 42120 event recording the receipt the ККМ printed for
+/// `sale_id` (or its return).
+pub fn build_crm_fiscal_receipt(
+    channel_id: Uuid,
+    sale_id: Uuid,
+    mut payload: FiscalReceiptPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let content =
+        serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    FiscalReceiptPayload::parse(&content).map_err(invalid)?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_FISCAL_RECEIPT as u16), content).tags([
+            tag(&["h", &channel_id.to_string()])?,
+            tag(&[tags::TAG_CRM_ID, &sale_id.to_string()])?,
+        ]),
+    )
+}
+
+/// Build the kind 42121 event recording a shift opened or closed on a ККМ.
+pub fn build_crm_cash_shift(
+    channel_id: Uuid,
+    mut payload: CashShiftPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let content =
+        serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    CashShiftPayload::parse(&content).map_err(invalid)?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_CASH_SHIFT as u16), content)
+            .tags([tag(&["h", &channel_id.to_string()])?]),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,6 +386,8 @@ mod tests {
             warehouse_id: Uuid::new_v4(),
             customer_id: None,
             payment: buzz_crm::PaymentMethod::Cash,
+            payments: Vec::new(),
+            cash_tendered_minor: None,
             lines: vec![buzz_crm::SaleLine {
                 product_id: Uuid::new_v4(),
                 qty_milli: buzz_crm::Qty::from_milli(qty).unwrap(),
@@ -382,5 +419,49 @@ mod tests {
             .unwrap();
         assert_eq!(u32::from(void.kind.as_u16()), KIND_CRM_SALE_VOID);
         assert_eq!(tag_values(&void, "crm-id"), vec![sale_id.to_string()]);
+    }
+
+    #[test]
+    fn fiscal_builders_validate_and_tag() {
+        let channel = Uuid::new_v4();
+        let sale = Uuid::new_v4();
+        let receipt = FiscalReceiptPayload {
+            v: 0,
+            operation: buzz_crm::FiscalOperation::Sell,
+            total_minor: buzz_crm::Money::from_minor(100).unwrap(),
+            task_uuid: Uuid::new_v4().to_string(),
+            fiscal: buzz_crm::FiscalParams {
+                document_number: 1,
+                document_sign: "123".into(),
+                receipt_number: 1,
+                shift_number: 1,
+                fn_number: "9999".into(),
+                registration_number: None,
+                document_datetime: "2026-10-25T10:00:00+03:00".into(),
+            },
+        };
+        let event = build_crm_fiscal_receipt(channel, sale, receipt.clone())
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_FISCAL_RECEIPT);
+        assert_eq!(tag_values(&event, "crm-id"), vec![sale.to_string()]);
+        let mut bad = receipt;
+        bad.task_uuid = "x".into();
+        assert!(build_crm_fiscal_receipt(channel, sale, bad).is_err());
+
+        let shift = CashShiftPayload {
+            v: 0,
+            action: buzz_crm::ShiftAction::Open,
+            fn_number: "9999".into(),
+            shift_number: 1,
+            document_number: 1,
+            document_datetime: "2026-10-25T09:00:00+03:00".into(),
+        };
+        let event = build_crm_cash_shift(channel, shift)
+            .unwrap()
+            .sign_with_keys(&Keys::generate())
+            .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_CASH_SHIFT);
     }
 }

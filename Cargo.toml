@@ -3,6 +3,8 @@ members = [
     "crates/buzz-relay",
     "crates/buzz-core",
     "crates/buzz-crm",
+    "crates/buzz-atol",
+    "crates/buzz-atol-emulator",
     "crates/ifc-core",
     "crates/buzz-conformance",
     "crates/buzz-push-gateway",

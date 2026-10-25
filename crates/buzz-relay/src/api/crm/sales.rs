@@ -24,6 +24,8 @@ use crate::{
 pub const SALES_PATH: &str = "/crm/sales";
 /// Route path of one sale.
 pub const SALE_PATH: &str = "/crm/sales/{sale_id}";
+/// Route path of the cash-register shifts read.
+pub const SHIFTS_PATH: &str = "/crm/shifts";
 /// Route path of the analytics read.
 pub const ANALYTICS_PATH: &str = "/crm/analytics";
 
@@ -111,6 +113,28 @@ pub async fn get(
         Ok(Some(sale)) => Json::<Value>(json!(sale)).into_response(),
         Ok(None) => not_found("sale not found").into_response(),
         Err(e) => internal_error(&format!("CRM sale read: {e}")).into_response(),
+    }
+}
+
+/// `GET /crm/shifts` — the space's 20 most recent cash-register shifts with
+/// their receipt totals, newest first.
+pub async fn shifts(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Response {
+    let member =
+        match authorize_space_member(&state, &headers, SHIFTS_PATH, raw_query.as_deref()).await {
+            Ok(member) => member,
+            Err(response) => return response,
+        };
+    match state
+        .db
+        .crm_list_shifts(member.community(), member.space.channel_id, 20)
+        .await
+    {
+        Ok(shifts) => Json(json!({ "shifts": shifts })).into_response(),
+        Err(e) => internal_error(&format!("CRM shifts read: {e}")).into_response(),
     }
 }
 

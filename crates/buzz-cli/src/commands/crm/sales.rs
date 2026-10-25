@@ -75,6 +75,8 @@ pub async fn run(cmd: CrmSalesCmd, client: &BuzzClient) -> Result<String, CliErr
                 warehouse_id,
                 customer_id,
                 payment,
+                payments: Vec::new(),
+                cash_tendered_minor: None,
                 lines: sale_lines,
                 note,
             };

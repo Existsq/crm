@@ -118,6 +118,11 @@ impl PreparedSale {
             });
         }
 
+        let parts = payload.payment_parts().map_err(invalid)?;
+        let payments: Vec<(&str, i64)> = parts
+            .iter()
+            .map(|part| (part.method.as_str(), part.amount_minor.minor()))
+            .collect();
         let sold_at = DateTime::<Utc>::from_timestamp(event.created_at.as_secs() as i64, 0)
             .ok_or_else(|| rejected("created_at is out of range"))?;
         let sale = store::SaleInsert {
@@ -133,6 +138,8 @@ impl PreparedSale {
             event_id: event.id.as_bytes(),
             actor: &actor,
             lines: &lines,
+            payments: &payments,
+            cash_tendered_minor: payload.cash_tendered_minor.map(|cash| cash.minor()),
         };
         store::sales::insert_sale(tx, community, &sale)
             .await

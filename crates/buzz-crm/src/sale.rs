@@ -52,6 +52,16 @@ impl PaymentMethod {
     }
 }
 
+/// One part of a sale's payment (a split payment has several).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SalePayment {
+    /// How this part was paid.
+    pub method: PaymentMethod,
+    /// Amount of this part, kopecks (positive).
+    pub amount_minor: Money,
+}
+
 /// One line of a sale as submitted by the client.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -90,8 +100,17 @@ pub struct SalePayload {
     /// Buyer; `None` for an anonymous walk-in sale.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<Uuid>,
-    /// Payment method.
+    /// Payment method; with a split payment, one of the `payments` methods
+    /// (the primary one shown in the journal).
     pub payment: PaymentMethod,
+    /// Split payment: one part per method, summing to the sale total. Empty
+    /// means the whole total was paid with `payment`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub payments: Vec<SalePayment>,
+    /// Cash handed over by the customer, at least the cash part; the change
+    /// is the difference. Only with a cash payment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cash_tendered_minor: Option<Money>,
     /// Sold goods, 1–[`MAX_SALE_LINES`] lines, one per product.
     pub lines: Vec<SaleLine>,
     /// Optional note.
@@ -131,7 +150,8 @@ impl SalePayload {
                 ));
             }
         }
-        payload.total()?;
+        let total = payload.total()?;
+        payload.check_payments(total)?;
         payload.note = payload
             .note
             .as_deref()
@@ -140,6 +160,86 @@ impl SalePayload {
             .map(|note| bounded(note, "note", MAX_SALE_NOTE_CHARS))
             .transpose()?;
         Ok(payload)
+    }
+
+    /// The payment parts: `payments`, or the whole total with `payment`.
+    pub fn payment_parts(&self) -> Result<Vec<SalePayment>> {
+        if !self.payments.is_empty() {
+            return Ok(self.payments.clone());
+        }
+        Ok(vec![SalePayment {
+            method: self.payment,
+            amount_minor: self.total()?,
+        }])
+    }
+
+    /// Cash part of the payment (zero without cash).
+    pub fn cash_amount(&self) -> Result<Money> {
+        Ok(self
+            .payment_parts()?
+            .iter()
+            .find(|part| part.method == PaymentMethod::Cash)
+            .map_or(Money::ZERO, |part| part.amount_minor))
+    }
+
+    /// Change due to the customer: tendered cash minus the cash part.
+    pub fn change(&self) -> Result<Money> {
+        match self.cash_tendered_minor {
+            Some(tendered) => tendered.checked_sub(self.cash_amount()?),
+            None => Ok(Money::ZERO),
+        }
+    }
+
+    fn check_payments(&self, total: Money) -> Result<()> {
+        if !self.payments.is_empty() {
+            let mut seen = HashSet::new();
+            for part in &self.payments {
+                if !seen.insert(part.method) {
+                    return Err(CrmError::field(
+                        "payments",
+                        format!("{} appears twice", part.method.as_str()),
+                    ));
+                }
+                if part.amount_minor.minor() <= 0 {
+                    return Err(CrmError::field("payments", "every part must be positive"));
+                }
+            }
+            if !seen.contains(&self.payment) {
+                return Err(CrmError::field(
+                    "payment",
+                    "must be one of the split payment methods",
+                ));
+            }
+            let paid = Money::checked_sum(self.payments.iter().map(|part| part.amount_minor))
+                .map_err(|_| CrmError::field("payments", "sum out of range"))?;
+            if paid != total {
+                return Err(CrmError::field(
+                    "payments",
+                    format!(
+                        "parts sum to {} kopecks, the sale total is {}",
+                        paid.minor(),
+                        total.minor()
+                    ),
+                ));
+            }
+        }
+        if let Some(tendered) = self.cash_tendered_minor {
+            Money::non_negative(tendered.minor(), "cash_tendered_minor")?;
+            let cash = self.cash_amount()?;
+            if cash == Money::ZERO {
+                return Err(CrmError::field(
+                    "cash_tendered_minor",
+                    "only with a cash payment",
+                ));
+            }
+            if tendered < cash {
+                return Err(CrmError::field(
+                    "cash_tendered_minor",
+                    "is less than the cash part of the payment",
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Sum of line amounts after discounts.
@@ -271,6 +371,56 @@ mod tests {
             .collect();
         let mut value = base();
         value["lines"] = json!(lines);
+        assert!(SalePayload::parse(&value.to_string()).is_err());
+    }
+
+    #[test]
+    fn split_payments_must_cover_the_total_exactly() {
+        let mut value = base();
+        value["payment"] = json!("cash");
+        value["payments"] = json!([
+            {"method": "cash", "amount_minor": 50_000},
+            {"method": "card", "amount_minor": 41_988}
+        ]);
+        value["cash_tendered_minor"] = json!(50_000 + 5_000);
+        let sale = SalePayload::parse(&value.to_string()).unwrap();
+        assert_eq!(sale.cash_amount().unwrap().minor(), 50_000);
+        assert_eq!(sale.change().unwrap().minor(), 5_000);
+
+        let bad = |patch: serde_json::Value| {
+            let mut value = value.clone();
+            for (key, field) in patch.as_object().unwrap() {
+                value[key] = field.clone();
+            }
+            SalePayload::parse(&value.to_string()).is_err()
+        };
+        assert!(bad(
+            json!({"payments": [{"method": "cash", "amount_minor": 1}]})
+        ));
+        assert!(bad(json!({"payment": "transfer"})));
+        assert!(bad(json!({"cash_tendered_minor": 49_999})));
+        assert!(bad(json!({"payments": [
+            {"method": "cash", "amount_minor": 91_988},
+            {"method": "cash", "amount_minor": 0}
+        ]})));
+    }
+
+    #[test]
+    fn single_payment_parts_and_change() {
+        let mut value = base();
+        value["payment"] = json!("cash");
+        value["cash_tendered_minor"] = json!(100_000);
+        let sale = SalePayload::parse(&value.to_string()).unwrap();
+        assert_eq!(
+            sale.payment_parts().unwrap(),
+            vec![SalePayment {
+                method: PaymentMethod::Cash,
+                amount_minor: Money::from_minor(91_988).unwrap()
+            }]
+        );
+        assert_eq!(sale.change().unwrap().minor(), 8_012);
+        // Tendered cash with a card-only sale is a client mistake.
+        value["payment"] = json!("card");
         assert!(SalePayload::parse(&value.to_string()).is_err());
     }
 

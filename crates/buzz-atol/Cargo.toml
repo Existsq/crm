@@ -1,0 +1,22 @@
+[package]
+name = "buzz-atol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "ATOL DTO10 web-server client, receipt mapping and a durable receipt outbox (ADR-0003)"
+
+[dependencies]
+buzz-crm   = { path = "../buzz-crm" }
+reqwest    = { workspace = true }
+rusqlite   = { version = "0.40", features = ["bundled"] }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+tokio      = { workspace = true }
+uuid       = { workspace = true, features = ["v5"] }
+
+[dev-dependencies]
+buzz-atol-emulator = { path = "../buzz-atol-emulator" }
+tokio = { workspace = true }

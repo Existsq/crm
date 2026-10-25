@@ -80,6 +80,10 @@ pub struct SaleInsert<'a> {
     pub actor: &'a [u8],
     /// Lines in submitted order.
     pub lines: &'a [SaleLineInsert<'a>],
+    /// Payment parts `(method, kopecks)`, one per method.
+    pub payments: &'a [(&'a str, i64)],
+    /// Cash handed over by the customer.
+    pub cash_tendered_minor: Option<i64>,
 }
 
 /// Outcome of voiding a sale.
@@ -150,9 +154,56 @@ pub struct CrmSaleRecord {
     pub event_id: Vec<u8>,
     /// Void details, when the sale is voided.
     pub void: Option<CrmSaleVoid>,
+    /// Payment parts, largest first.
+    pub payments: Vec<CrmSalePayment>,
+    /// Cash handed over by the customer.
+    pub cash_tendered_minor: Option<i64>,
+    /// Fiscal receipts printed for the sale (`sell`) and its return.
+    pub fiscal: CrmSaleFiscal,
     /// Lines; filled only by [`get_sale`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lines: Option<Vec<CrmSaleLineRecord>>,
+}
+
+/// One payment part of a sale.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct CrmSalePayment {
+    /// Method wire name.
+    pub method: String,
+    /// Amount, kopecks.
+    pub amount_minor: i64,
+}
+
+/// What the ККМ returned for one receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct CrmFiscalRecord {
+    /// Fiscal document number (ФД).
+    pub document_number: i64,
+    /// Fiscal sign (ФП).
+    pub document_sign: String,
+    /// Receipt number in the shift.
+    pub receipt_number: i64,
+    /// Shift number.
+    pub shift_number: i64,
+    /// Fiscal storage number (ФН).
+    pub fn_number: String,
+    /// ККТ registration number.
+    pub registration_number: Option<String>,
+    /// Device date and time.
+    pub document_datetime: String,
+    /// Printed total, kopecks.
+    pub total_minor: i64,
+}
+
+/// Receipts of a sale: the sale receipt and, after a void, the return.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct CrmSaleFiscal {
+    /// Sale receipt.
+    #[serde(default)]
+    pub sell: Option<CrmFiscalRecord>,
+    /// Return receipt.
+    #[serde(default)]
+    pub sell_return: Option<CrmFiscalRecord>,
 }
 
 /// Void details of a sale.
@@ -273,9 +324,9 @@ pub async fn insert_sale(
         "INSERT INTO crm_sales \
              (community_id, sale_id, space_channel_id, number, warehouse_id, customer_id, \
               payment, total_minor, discount_minor, line_count, note, sold_at, event_id, \
-              created_by) \
+              created_by, cash_tendered_minor) \
          SELECT $1, $2, $3, COALESCE(max(number), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11, \
-                $12, $13 \
+                $12, $13, $14 \
          FROM crm_sales WHERE community_id = $1 AND space_channel_id = $3 \
          RETURNING number",
     )
@@ -292,7 +343,21 @@ pub async fn insert_sale(
     .bind(sale.sold_at)
     .bind(sale.event_id)
     .bind(sale.actor)
+    .bind(sale.cash_tendered_minor)
     .fetch_one(&mut **tx)
+    .await?;
+
+    let methods: Vec<&str> = sale.payments.iter().map(|(method, _)| *method).collect();
+    let amounts: Vec<i64> = sale.payments.iter().map(|(_, amount)| *amount).collect();
+    sqlx::query(
+        "INSERT INTO crm_sale_payments (community_id, sale_id, method, amount_minor) \
+         SELECT $1, $2, method, amount FROM unnest($3::text[], $4::bigint[]) AS p(method, amount)",
+    )
+    .bind(community.as_uuid())
+    .bind(sale.sale_id)
+    .bind(&methods)
+    .bind(&amounts)
+    .execute(&mut **tx)
     .await?;
 
     let column =
@@ -370,7 +435,26 @@ macro_rules! sale_columns {
     () => {
         "s.sale_id, s.number, s.warehouse_id, w.name AS warehouse_name, s.customer_id, \
          p.name AS customer_name, s.payment, s.total_minor, s.discount_minor, s.line_count, \
-         s.note, s.sold_at, s.created_by, s.event_id, s.voided_at, s.void_reason, s.voided_by \
+         s.note, s.sold_at, s.created_by, s.event_id, s.voided_at, s.void_reason, s.voided_by, \
+         s.cash_tendered_minor, \
+         COALESCE((SELECT jsonb_agg(jsonb_build_object('method', sp.method, \
+                                                       'amount_minor', sp.amount_minor) \
+                                    ORDER BY sp.amount_minor DESC, sp.method) \
+                   FROM crm_sale_payments sp \
+                   WHERE sp.community_id = s.community_id AND sp.sale_id = s.sale_id), \
+                  '[]'::jsonb) AS payments, \
+         COALESCE((SELECT jsonb_object_agg(fr.operation, jsonb_build_object( \
+                       'document_number', fr.document_number, \
+                       'document_sign', fr.document_sign, \
+                       'receipt_number', fr.receipt_number, \
+                       'shift_number', fr.shift_number, \
+                       'fn_number', fr.fn_number, \
+                       'registration_number', fr.registration_number, \
+                       'document_datetime', fr.document_datetime, \
+                       'total_minor', fr.total_minor)) \
+                   FROM crm_fiscal_receipts fr \
+                   WHERE fr.community_id = s.community_id AND fr.sale_id = s.sale_id), \
+                  '{}'::jsonb) AS fiscal \
          FROM crm_sales s \
          JOIN crm_warehouses w ON w.community_id = s.community_id \
                               AND w.warehouse_id = s.warehouse_id \
@@ -502,6 +586,11 @@ fn sale_from_row(row: sqlx::postgres::PgRow) -> Result<CrmSaleRecord> {
         created_by: row.try_get("created_by")?,
         event_id: row.try_get("event_id")?,
         void,
+        payments: serde_json::from_value(row.try_get("payments")?)
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+        cash_tendered_minor: row.try_get("cash_tendered_minor")?,
+        fiscal: serde_json::from_value(row.try_get("fiscal")?)
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
         lines: None,
     })
 }

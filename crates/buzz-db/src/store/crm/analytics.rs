@@ -101,7 +101,8 @@ pub struct SalesAnalytics {
     pub by_day: Vec<RevenueBucket<NaiveDate>>,
     /// Hours of day (0–23) with sales, ascending.
     pub by_hour: Vec<RevenueBucket<i32>>,
-    /// Payment methods with sales, by revenue.
+    /// Payment methods by amount paid (a split payment counts in each of
+    /// its methods), largest first.
     pub by_payment: Vec<RevenueBucket<String>>,
     /// Best-selling products by revenue.
     pub top_products: Vec<TopProduct>,
@@ -218,9 +219,12 @@ pub async fn sales_analytics(
 
     let by_payment = bucket_rows(
         query!(concat!(
-            "SELECT s.payment AS key, sum(total_minor)::bigint AS revenue, \
+            "SELECT sp.method AS key, sum(sp.amount_minor)::bigint AS revenue, \
                     count(*)::bigint AS sales \
-             FROM crm_sales s WHERE",
+             FROM crm_sales s \
+             JOIN crm_sale_payments sp ON sp.community_id = s.community_id \
+                                      AND sp.sale_id = s.sale_id \
+             WHERE",
             in_period!(),
             "GROUP BY 1 ORDER BY 2 DESC, 1"
         ))

@@ -330,6 +330,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(api::crm::parties::PARTY_PATH, get(api::crm::parties::get))
         .route(api::crm::sales::SALES_PATH, get(api::crm::sales::list))
         .route(api::crm::sales::SALE_PATH, get(api::crm::sales::get))
+        .route(api::crm::sales::SHIFTS_PATH, get(api::crm::sales::shifts))
         .route(
             api::crm::sales::ANALYTICS_PATH,
             get(api::crm::sales::analytics),

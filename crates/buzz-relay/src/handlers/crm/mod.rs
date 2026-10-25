@@ -9,6 +9,7 @@
 
 mod catalog;
 mod decide;
+mod fiscal;
 pub(crate) mod guards;
 mod parties;
 mod sales;
@@ -22,8 +23,8 @@ use tracing::info;
 use uuid::Uuid;
 
 use buzz_core::kind::{
-    event_kind_u32, KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID,
-    KIND_CRM_SPACE, KIND_CRM_WAREHOUSE,
+    event_kind_u32, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY, KIND_CRM_PRODUCT,
+    KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_WAREHOUSE,
 };
 use buzz_core::tenant::TenantContext;
 
@@ -56,6 +57,8 @@ pub(crate) async fn ingest_crm_event(
         KIND_CRM_PARTY => Prepared::Party(parties::PreparedParty::parse(event)?),
         KIND_CRM_SALE => Prepared::Sale(sales::PreparedSale::parse(event)?),
         KIND_CRM_SALE_VOID => Prepared::SaleVoid(sales::PreparedSaleVoid::parse(event)?),
+        KIND_CRM_FISCAL_RECEIPT => Prepared::Receipt(fiscal::PreparedReceipt::parse(event)?),
+        KIND_CRM_CASH_SHIFT => Prepared::Shift(fiscal::PreparedShift::parse(event)?),
         other => {
             return Err(IngestError::Rejected(format!(
                 "invalid: CRM kind {other} is not supported by this relay"
@@ -126,6 +129,8 @@ enum Prepared {
     Party(parties::PreparedParty),
     Sale(sales::PreparedSale),
     SaleVoid(sales::PreparedSaleVoid),
+    Receipt(fiscal::PreparedReceipt),
+    Shift(fiscal::PreparedShift),
 }
 
 impl Prepared {
@@ -142,6 +147,8 @@ impl Prepared {
             Prepared::Party(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
             Prepared::Sale(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
             Prepared::SaleVoid(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::Receipt(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::Shift(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
         }
     }
 }

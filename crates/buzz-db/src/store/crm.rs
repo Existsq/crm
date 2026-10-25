@@ -1,7 +1,8 @@
 //! CRM projections: spaces and warehouses (migration 0050); the product
 //! catalog lives in [`catalog`] (migration 0051), customers and suppliers in
 //! [`parties`] (0052), sale documents in [`sales`] (0053) and the read-only
-//! [`analytics`] over them.
+//! [`analytics`] over them; fiscal receipts and cash shifts in [`fiscal`]
+//! (0054).
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
 //! event and its projection rows commit or roll back together (ADR-0001).
@@ -19,6 +20,7 @@ use crate::{error::Result, CommunityId, Db};
 
 pub mod analytics;
 pub mod catalog;
+pub mod fiscal;
 pub mod parties;
 pub mod sales;
 
@@ -27,6 +29,7 @@ pub use catalog::{
     CrmProductRecord, ProductPage, ProductQuery, ProductWrite, ProductWriteOutcome,
     MAX_PRODUCT_PAGE,
 };
+pub use fiscal::{CrmShiftRecord, ReceiptOutcome, ReceiptWrite, ShiftOutcome, ShiftWrite};
 pub use parties::{
     CrmPartyRecord, PartyPage, PartyQuery, PartyRole, PartyWrite, PartyWriteOutcome, MAX_PARTY_PAGE,
 };

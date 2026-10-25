@@ -11,6 +11,7 @@
 //! - [`authz`] — the role × action table (ADR-0002).
 //! - [`space`] — CRM space and warehouse payloads (kinds 42100, 42101).
 //! - [`catalog`] — product payload, units, fiscal item types (kind 42102).
+//! - [`fiscal`] — fiscal receipts and cash-register shifts (kinds 42120, 42121).
 //! - [`party`] — customers and suppliers (kind 42103).
 //! - [`sale`] — sale documents and their reversal (kinds 42104, 42105).
 //! - [`tags`] — tag conventions shared by every CRM event.
@@ -19,6 +20,7 @@
 pub mod authz;
 pub mod catalog;
 pub mod error;
+pub mod fiscal;
 pub mod money;
 pub mod party;
 pub mod sale;
@@ -30,9 +32,12 @@ pub mod vat;
 pub use authz::{capabilities, decide, CrmAction, CrmRole};
 pub use catalog::{PaymentObject, ProductPayload, Unit};
 pub use error::{CrmError, Result};
+pub use fiscal::{
+    CashShiftPayload, FiscalOperation, FiscalParams, FiscalReceiptPayload, ShiftAction,
+};
 pub use money::{line_amount, Money, Qty};
 pub use party::{PartyPayload, PartyType};
-pub use sale::{PaymentMethod, SaleLine, SalePayload, SaleVoidPayload};
+pub use sale::{PaymentMethod, SaleLine, SalePayload, SalePayment, SaleVoidPayload};
 pub use space::{
     Currency, FiscalizationMode, SpacePayload, SpaceSettings, WarehousePayload, WarehouseSeed,
 };
