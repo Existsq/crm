@@ -1,6 +1,9 @@
-//! `buzz crm` — retail CRM space, warehouses and products (kinds 42100–42199).
+//! `buzz crm` — retail CRM space, warehouses, products, customers, sales and
+//! analytics (kinds 42100–42199).
 
+mod parties;
 mod products;
+mod sales;
 
 use buzz_crm::{Currency, FiscalizationMode, SpaceSettings, VatRate, WarehouseSeed};
 
@@ -19,6 +22,9 @@ pub async fn dispatch(cmd: CrmCmd, client: &BuzzClient) -> Result<(), CliError> 
 async fn run(cmd: CrmCmd, client: &BuzzClient) -> Result<String, CliError> {
     match cmd {
         CrmCmd::Products(cmd) => products::run(cmd, client).await,
+        CrmCmd::Parties(cmd) => parties::run(cmd, client).await,
+        CrmCmd::Sales(cmd) => sales::run(cmd, client).await,
+        CrmCmd::Analytics { from, to } => sales::analytics(client, from, to).await,
         CrmCmd::Space(CrmSpaceCmd::Show) => client.get_authed("/crm/space").await,
         CrmCmd::Space(CrmSpaceCmd::Init {
             channel,

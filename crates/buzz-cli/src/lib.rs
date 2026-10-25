@@ -279,7 +279,7 @@ enum Cmd {
     /// Community moderation — reports queue, bans, timeouts, audit trail
     #[command(subcommand)]
     Moderation(ModerationCmd),
-    /// Retail CRM — CRM space, warehouses, products (kinds 42100–42199)
+    /// Retail CRM — space, warehouses, products, customers, sales, analytics (kinds 42100–42199)
     #[command(subcommand)]
     Crm(CrmCmd),
 }
@@ -295,6 +295,21 @@ pub enum CrmCmd {
     /// List, create, update or archive catalog products
     #[command(subcommand)]
     Products(CrmProductsCmd),
+    /// List, create, update or archive customers and suppliers
+    #[command(subcommand)]
+    Parties(CrmPartiesCmd),
+    /// List, post or void sales
+    #[command(subcommand)]
+    Sales(CrmSalesCmd),
+    /// Sales and customer analytics (GET /crm/analytics)
+    Analytics {
+        /// First day, YYYY-MM-DD (default: 29 days before --to)
+        #[arg(long)]
+        from: Option<String>,
+        /// Last day, YYYY-MM-DD (default: today in the space timezone)
+        #[arg(long)]
+        to: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -459,6 +474,154 @@ pub enum CrmProductsCmd {
         /// Restore an archived product instead
         #[arg(long)]
         restore: bool,
+    },
+}
+
+/// Party fields shared by `create` and `update`; on update, an omitted flag
+/// keeps the current value and "" clears an optional field.
+#[derive(clap::Args, Debug, Default)]
+pub struct CrmPartyFields {
+    /// customer, supplier or both
+    #[arg(long = "type")]
+    pub party_type: Option<String>,
+    /// Person's full name or company name (1–128 characters)
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Phone number
+    #[arg(long)]
+    pub phone: Option<String>,
+    /// Email address
+    #[arg(long)]
+    pub email: Option<String>,
+    /// Taxpayer number (ИНН, 10 or 12 digits), unique per space
+    #[arg(long)]
+    pub inn: Option<String>,
+    /// Address
+    #[arg(long)]
+    pub address: Option<String>,
+    /// Free-text note
+    #[arg(long)]
+    pub note: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum CrmPartiesCmd {
+    /// List or search customers and suppliers (GET /crm/parties)
+    List {
+        /// Name or email substring, INN prefix or phone digits
+        #[arg(long)]
+        query: Option<String>,
+        /// customers or suppliers (parties of type both match either)
+        #[arg(long)]
+        role: Option<String>,
+        /// Include archived parties
+        #[arg(long)]
+        archived: bool,
+        /// Page size (1–200, default 50)
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Cursor from the previous page's `next`
+        #[arg(long)]
+        after: Option<String>,
+    },
+    /// Show one party with its purchase totals (GET /crm/parties/{id})
+    Get {
+        /// Party UUID
+        #[arg(long)]
+        party: String,
+    },
+    /// Create a customer or supplier (default type: customer)
+    Create {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        #[command(flatten)]
+        fields: CrmPartyFields,
+    },
+    /// Update a party; unspecified fields keep their current values
+    Update {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Party UUID
+        #[arg(long)]
+        party: String,
+        /// Expected revision (defaults to the current one)
+        #[arg(long)]
+        revision: Option<String>,
+        #[command(flatten)]
+        fields: CrmPartyFields,
+    },
+    /// Archive a party (or restore it with --restore)
+    Archive {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Party UUID
+        #[arg(long)]
+        party: String,
+        /// Restore an archived party instead
+        #[arg(long)]
+        restore: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CrmSalesCmd {
+    /// The sale journal, newest first (GET /crm/sales)
+    List {
+        /// Only sales of this customer (party UUID)
+        #[arg(long)]
+        customer: Option<String>,
+        /// Hide voided sales
+        #[arg(long)]
+        hide_voided: bool,
+        /// Page size (1–200, default 50)
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Cursor from the previous page's `next` (a sale number)
+        #[arg(long)]
+        before: Option<i64>,
+    },
+    /// Show one sale with its lines (GET /crm/sales/{id})
+    Get {
+        /// Sale UUID
+        #[arg(long)]
+        sale: String,
+    },
+    /// Post a sale (kind 42104)
+    Create {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Warehouse UUID (default: the space's default warehouse)
+        #[arg(long)]
+        warehouse: Option<String>,
+        /// Customer party UUID (omit for an anonymous sale)
+        #[arg(long)]
+        customer: Option<String>,
+        /// cash, card or transfer
+        #[arg(long, default_value = "cash")]
+        payment: String,
+        /// PRODUCT_UUID:QTY[:PRICE[:DISCOUNT]] in units and rubles; the price
+        /// defaults to the catalog price (repeat per product)
+        #[arg(long = "line", required = true)]
+        lines: Vec<String>,
+        /// Note
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Void (сторно) a sale (kind 42105; owner/admin only)
+    Void {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Sale UUID
+        #[arg(long)]
+        sale: String,
+        /// Why the sale is voided
+        #[arg(long)]
+        reason: String,
     },
 }
 

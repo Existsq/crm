@@ -81,7 +81,11 @@ async fn product(keys: &Keys, channel: Uuid, name: &str, unit: &str) -> Uuid {
         "v": 1, "name": name, "unit": unit, "price_minor": 9_000,
         "vat": "vat10", "payment_object": "commodity"
     });
-    accept(keys, &entity_event(keys, KIND_CRM_PRODUCT, channel, id, &payload, None)).await;
+    accept(
+        keys,
+        &entity_event(keys, KIND_CRM_PRODUCT, channel, id, &payload, None),
+    )
+    .await;
     id
 }
 
@@ -123,7 +127,14 @@ async fn parties_are_created_searched_updated_and_kept_unique() {
     let other = Uuid::new_v4();
     reject(
         &guest,
-        &entity_event(&guest, KIND_CRM_PARTY, channel, other, &party("supplier", "X"), None),
+        &entity_event(
+            &guest,
+            KIND_CRM_PARTY,
+            channel,
+            other,
+            &party("supplier", "X"),
+            None,
+        ),
         403,
         "restricted:",
     )
@@ -147,7 +158,14 @@ async fn parties_are_created_searched_updated_and_kept_unique() {
     .await;
     reject(
         &member,
-        &entity_event(&member, KIND_CRM_PARTY, channel, maria, &payload, Some(&"ab".repeat(32))),
+        &entity_event(
+            &member,
+            KIND_CRM_PARTY,
+            channel,
+            maria,
+            &payload,
+            Some(&"ab".repeat(32)),
+        ),
         409,
         "conflict:",
     )
@@ -155,7 +173,14 @@ async fn parties_are_created_searched_updated_and_kept_unique() {
 
     accept(
         &member,
-        &entity_event(&member, KIND_CRM_PARTY, channel, other, &party("supplier", "Молокозавод"), None),
+        &entity_event(
+            &member,
+            KIND_CRM_PARTY,
+            channel,
+            other,
+            &party("supplier", "Молокозавод"),
+            None,
+        ),
     )
     .await;
     let (_, list) = get(&member, "/crm/parties?q=000-11").await;
@@ -173,7 +198,14 @@ async fn parties_are_created_searched_updated_and_kept_unique() {
     archived["archived"] = json!(true);
     accept(
         &member,
-        &entity_event(&member, KIND_CRM_PARTY, channel, maria, &archived, Some(&create.id.to_hex())),
+        &entity_event(
+            &member,
+            KIND_CRM_PARTY,
+            channel,
+            maria,
+            &archived,
+            Some(&create.id.to_hex()),
+        ),
     )
     .await;
     let (_, list) = get(&member, "/crm/parties?role=customers").await;
@@ -194,13 +226,27 @@ async fn sales_post_once_validate_references_void_and_feed_analytics() {
     let maria = Uuid::new_v4();
     accept(
         &owner,
-        &entity_event(&owner, KIND_CRM_PARTY, channel, maria, &party("customer", "Мария"), None),
+        &entity_event(
+            &owner,
+            KIND_CRM_PARTY,
+            channel,
+            maria,
+            &party("customer", "Мария"),
+            None,
+        ),
     )
     .await;
     let supplier = Uuid::new_v4();
     accept(
         &owner,
-        &entity_event(&owner, KIND_CRM_PARTY, channel, supplier, &party("supplier", "Завод"), None),
+        &entity_event(
+            &owner,
+            KIND_CRM_PARTY,
+            channel,
+            supplier,
+            &party("supplier", "Завод"),
+            None,
+        ),
     )
     .await;
 
@@ -233,7 +279,14 @@ async fn sales_post_once_validate_references_void_and_feed_analytics() {
     assert!(accepted && message.starts_with("duplicate:"), "{message}");
     reject(
         &member,
-        &entity_event(&member, KIND_CRM_SALE, channel, first, &sale(warehouse, None, lines.clone()), None),
+        &entity_event(
+            &member,
+            KIND_CRM_SALE,
+            channel,
+            first,
+            &sale(warehouse, None, lines.clone()),
+            None,
+        ),
         409,
         "conflict:",
     )
@@ -251,7 +304,14 @@ async fn sales_post_once_validate_references_void_and_feed_analytics() {
     ] {
         reject(
             &member,
-            &entity_event(&member, KIND_CRM_SALE, channel, Uuid::new_v4(), &payload, None),
+            &entity_event(
+                &member,
+                KIND_CRM_SALE,
+                channel,
+                Uuid::new_v4(),
+                &payload,
+                None,
+            ),
             400,
             "invalid:",
         )
@@ -266,7 +326,11 @@ async fn sales_post_once_validate_references_void_and_feed_analytics() {
             KIND_CRM_SALE,
             channel,
             second,
-            &sale(warehouse, None, json!([{"product_id": kefir, "qty_milli": 1000, "price_minor": 9000}])),
+            &sale(
+                warehouse,
+                None,
+                json!([{"product_id": kefir, "qty_milli": 1000, "price_minor": 9000}]),
+            ),
             None,
         ),
     )
@@ -276,12 +340,19 @@ async fn sales_post_once_validate_references_void_and_feed_analytics() {
     assert_eq!(party_body["purchases"]["revenue_minor"], json!(23_750));
 
     let (_, analytics) = get(&member, "/crm/analytics").await;
-    assert_eq!(analytics["totals"]["revenue_minor"], json!(32_750), "{analytics}");
+    assert_eq!(
+        analytics["totals"]["revenue_minor"],
+        json!(32_750),
+        "{analytics}"
+    );
     assert_eq!(analytics["totals"]["sales_count"], json!(2));
     assert_eq!(analytics["totals"]["avg_check_minor"], json!(16_375));
     assert_eq!(analytics["timezone"], json!("Europe/Moscow"));
     assert_eq!(analytics["top_products"][0]["name"], json!("Кефир"));
-    assert_eq!(analytics["customers"]["anonymous_revenue_minor"], json!(9_000));
+    assert_eq!(
+        analytics["customers"]["anonymous_revenue_minor"],
+        json!(9_000)
+    );
 
     // Members may not void; admins void once; voided sales leave analytics.
     let void = |keys: &Keys, reason: &str| {
@@ -289,7 +360,10 @@ async fn sales_post_once_validate_references_void_and_feed_analytics() {
             keys,
             KIND_CRM_SALE_VOID,
             &json!({"v": 1, "reason": reason}).to_string(),
-            vec![tag(&["h", &channel.to_string()]), tag(&["crm-id", &first.to_string()])],
+            vec![
+                tag(&["h", &channel.to_string()]),
+                tag(&["crm-id", &first.to_string()]),
+            ],
         )
     };
     reject(&member, &void(&member, "ошибка"), 403, "restricted:").await;
