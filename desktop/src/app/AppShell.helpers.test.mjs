@@ -5,6 +5,7 @@ import {
   markAllReadSources,
   activateDesktopNotificationTarget,
   createDesktopNotificationActivationQueue,
+  deriveShellRoute,
   shouldBounceForChannelNotification,
 } from "./AppShell.helpers.ts";
 
@@ -242,4 +243,15 @@ test("markAllReadSources skips the active marker without projected activity", ()
   });
 
   assert.deepEqual(calls, ["channels"]);
+});
+
+test("deriveShellRoute marks every /crm route as the CRM view", () => {
+  for (const pathname of ["/crm", "/crm/settings", "/crm/unknown"]) {
+    assert.deepEqual(deriveShellRoute(pathname), {
+      selectedChannelId: null,
+      selectedView: "crm",
+    });
+  }
+  assert.notEqual(deriveShellRoute("/crmx").selectedView, "crm");
+  assert.notEqual(deriveShellRoute("/channels/crm").selectedView, "crm");
 });

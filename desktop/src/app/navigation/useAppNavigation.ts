@@ -186,6 +186,17 @@ export function useAppNavigation() {
     [commitNavigation],
   );
 
+  const goCrm = React.useCallback(
+    (behavior?: NavigationBehavior) =>
+      commitNavigation(
+        {
+          to: "/crm",
+        },
+        behavior,
+      ),
+    [commitNavigation],
+  );
+
   const goWorkflow = React.useCallback(
     (workflowId: string, behavior?: NavigationBehavior) =>
       commitNavigation(
@@ -460,6 +471,7 @@ export function useAppNavigation() {
     closeWorkflowDetail,
     goAgents,
     goChannel,
+    goCrm,
     goDuplicateWorkflow,
     goEditWorkflow,
     goForumPost,

@@ -1,4 +1,4 @@
-import { Activity, Bot, Folders, Inbox, Zap } from "lucide-react";
+import { Activity, Bot, Folders, Inbox, Store, Zap } from "lucide-react";
 
 import { TopbarSearch } from "@/features/search/ui/TopbarSearch";
 import { SidebarProjectsSection } from "@/features/sidebar/ui/SidebarProjectsSection";
@@ -21,7 +21,8 @@ type SidebarSelectedView =
   | "agents"
   | "workflows"
   | "pulse"
-  | "projects";
+  | "projects"
+  | "crm";
 
 type AppSidebarPinnedHeaderProps = {
   channelLabels: Record<string, string>;
@@ -46,6 +47,7 @@ type AppSidebarPrimaryMenuProps = {
   onSelectProjects: () => void;
   onSelectPulse: () => void;
   onSelectWorkflows: () => void;
+  onSelectCrm: () => void;
   projectsOverviewActive: boolean;
   selectedView: SidebarSelectedView;
 };
@@ -96,6 +98,7 @@ export function AppSidebarPrimaryMenu({
   onSelectProjects,
   onSelectPulse,
   onSelectWorkflows,
+  onSelectCrm,
   projectsOverviewActive,
   selectedView,
 }: AppSidebarPrimaryMenuProps) {
@@ -180,6 +183,20 @@ export function AppSidebarPrimaryMenu({
               >
                 <Zap className="h-4 w-4" />
                 <SidebarMenuLabel>Workflows</SidebarMenuLabel>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </FeatureGate>
+          <FeatureGate feature="crm">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                data-testid="open-crm-view"
+                isActive={selectedView === "crm"}
+                onClick={onSelectCrm}
+                tooltip="CRM"
+                type="button"
+              >
+                <Store className="h-4 w-4" />
+                <SidebarMenuLabel>CRM</SidebarMenuLabel>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </FeatureGate>

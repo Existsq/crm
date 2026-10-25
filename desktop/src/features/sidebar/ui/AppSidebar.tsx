@@ -120,6 +120,7 @@ export function AppSidebar({
   onSelectProjects,
   onSelectPulse,
   onSelectWorkflows,
+  onSelectCrm,
   onSelectHome,
   onSelectChannel,
   onOpenSearchResult,
@@ -572,6 +573,7 @@ export function AppSidebar({
                 onSelectProjects={onSelectProjects}
                 onSelectPulse={onSelectPulse}
                 onSelectWorkflows={onSelectWorkflows}
+                onSelectCrm={onSelectCrm}
                 projectsOverviewActive={projectsOverviewActive}
                 selectedView={selectedView}
               />

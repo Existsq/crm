@@ -1139,6 +1139,7 @@ dependencies = [
  "block2",
  "buzz-agent",
  "buzz-core",
+ "buzz-crm",
  "buzz-media",
  "buzz-persona",
  "buzz-sdk",
