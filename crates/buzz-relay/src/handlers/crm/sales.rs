@@ -11,8 +11,8 @@ use buzz_core::tenant::TenantContext;
 use buzz_crm::{tags, CrmAction, CrmError, PartyType, SalePayload, SaleVoidPayload, Unit};
 use buzz_db::crm::{self as store, SaleVoidOutcome};
 
-use super::db_error;
 use super::space::{conflict, invalid, require_live_space, tag_slices};
+use super::{db_error, stock};
 use crate::handlers::ingest::IngestError;
 
 fn rejected(message: impl std::fmt::Display) -> IngestError {
@@ -144,7 +144,24 @@ impl PreparedSale {
         store::sales::insert_sale(tx, community, &sale)
             .await
             .map_err(|e| db_error("insert CRM sale", e))?;
-        Ok(())
+        let sold: Vec<stock::SoldLine> = payload
+            .lines
+            .iter()
+            .map(|line| stock::SoldLine {
+                product_id: line.product_id,
+                qty: line.qty_milli,
+            })
+            .collect();
+        stock::post_sale(
+            tx,
+            community,
+            channel_id,
+            self.sale_id,
+            payload.warehouse_id,
+            &sold,
+            event,
+        )
+        .await
     }
 }
 
@@ -206,7 +223,8 @@ impl PreparedSaleVoid {
             channel_id,
             &actor,
             CrmAction::VoidDocuments,
-            false,
+            // Exclusive: the returned goods change stock levels.
+            true,
         )
         .await?;
         let outcome = store::sales::void_sale(
@@ -220,7 +238,17 @@ impl PreparedSaleVoid {
         )
         .await
         .map_err(|e| db_error("void CRM sale", e))?;
-        void_outcome(outcome)
+        void_outcome(outcome)?;
+        // Returned goods go back on the shelf whatever the negative-stock rule.
+        stock::revert_moves(
+            tx,
+            tenant.community(),
+            channel_id,
+            self.sale_id,
+            true,
+            event,
+        )
+        .await
     }
 }
 

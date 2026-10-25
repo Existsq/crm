@@ -7,12 +7,13 @@
 use buzz_core::kind::{
     KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY,
     KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF,
-    KIND_CRM_STAFF_SCHEDULE, KIND_CRM_WAREHOUSE,
+    KIND_CRM_STAFF_SCHEDULE, KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID, KIND_CRM_TECH_CARD,
+    KIND_CRM_WAREHOUSE,
 };
 use buzz_crm::{
     space::PAYLOAD_VERSION, tags, AppointmentPayload, CashShiftPayload, FiscalReceiptPayload,
     PartyPayload, ProductPayload, SalePayload, SaleVoidPayload, SchedulePayload, SpacePayload,
-    SpaceSettings, StaffPayload, WarehousePayload, WarehouseSeed,
+    SpaceSettings, StaffPayload, StockDocPayload, TechCardPayload, WarehousePayload, WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -276,6 +277,74 @@ pub fn build_crm_staff_schedule(
         EventBuilder::new(Kind::Custom(KIND_CRM_STAFF_SCHEDULE as u16), content)
             .tags([tag(&["h", &channel_id.to_string()])?]),
     )
+}
+
+/// Build the kind 42106 event that posts stock document `doc_id` (receipt,
+/// write-off, inventory or transfer).
+///
+/// Documents are posted once; pick `doc_id` once per document so a retried
+/// submit is rejected as a duplicate instead of moving stock twice.
+pub fn build_crm_stock_doc(
+    channel_id: Uuid,
+    doc_id: Uuid,
+    mut payload: StockDocPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = StockDocPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_STOCK_DOC as u16), content).tags([
+            tag(&["h", &channel_id.to_string()])?,
+            tag(&[tags::TAG_CRM_ID, &doc_id.to_string()])?,
+        ]),
+    )
+}
+
+/// Build the kind 42107 event that voids (сторно) stock document `doc_id`.
+pub fn build_crm_stock_doc_void(
+    channel_id: Uuid,
+    doc_id: Uuid,
+    reason: &str,
+) -> Result<EventBuilder, SdkError> {
+    let payload = SaleVoidPayload {
+        v: PAYLOAD_VERSION,
+        reason: reason.to_owned(),
+    };
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = SaleVoidPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_STOCK_DOC_VOID as u16), content).tags([
+            tag(&["h", &channel_id.to_string()])?,
+            tag(&[tags::TAG_CRM_ID, &doc_id.to_string()])?,
+        ]),
+    )
+}
+
+/// Build the kind 42108 event that sets the consumables of service
+/// `service_id`. Pass `expected_revision` (the card's current revision) to
+/// replace an existing card; omit it to create one.
+pub fn build_crm_tech_card(
+    channel_id: Uuid,
+    service_id: Uuid,
+    mut payload: TechCardPayload,
+    expected_revision: Option<&str>,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let content =
+        serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    TechCardPayload::parse(&content).map_err(invalid)?;
+    let mut event_tags = vec![
+        tag(&["h", &channel_id.to_string()])?,
+        tag(&[tags::TAG_CRM_ID, &service_id.to_string()])?,
+    ];
+    if let Some(revision) = expected_revision {
+        event_tags.push(revision_tag(revision)?);
+    }
+    Ok(EventBuilder::new(Kind::Custom(KIND_CRM_TECH_CARD as u16), content).tags(event_tags))
 }
 
 /// Build the kind 42133 event that creates or updates one appointment.
@@ -574,6 +643,68 @@ mod tests {
             .unwrap();
         assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_CASH_SHIFT);
     }
+
+    #[test]
+    fn stock_documents_and_tech_cards_round_trip() {
+        use buzz_crm::{Money, Qty, StockDocLine, StockDocType, TechCardItem};
+        let keys = Keys::generate();
+        let channel = Uuid::new_v4();
+        let doc = Uuid::new_v4();
+        let product = Uuid::new_v4();
+        let event = build_crm_stock_doc(
+            channel,
+            doc,
+            StockDocPayload {
+                v: 0,
+                doc_type: StockDocType::Receipt,
+                warehouse_id: Uuid::new_v4(),
+                to_warehouse_id: None,
+                supplier_id: None,
+                reference: Some("  ТН-1 ".into()),
+                lines: vec![StockDocLine {
+                    product_id: product,
+                    qty_milli: Qty::from_units(5).unwrap(),
+                    cost_minor: Some(Money::from_minor(12_000).unwrap()),
+                }],
+                note: None,
+            },
+        )
+        .unwrap()
+        .sign_with_keys(&keys)
+        .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_STOCK_DOC);
+        assert_eq!(tag_values(&event, "crm-id"), vec![doc.to_string()]);
+        let parsed = StockDocPayload::parse(&event.content).unwrap();
+        assert_eq!(parsed.reference.as_deref(), Some("ТН-1"));
+
+        let void = build_crm_stock_doc_void(channel, doc, " пересорт ")
+            .unwrap()
+            .sign_with_keys(&keys)
+            .unwrap();
+        assert_eq!(u32::from(void.kind.as_u16()), KIND_CRM_STOCK_DOC_VOID);
+        assert!(void.content.contains("\"пересорт\""));
+
+        let card = TechCardPayload {
+            v: 0,
+            items: vec![TechCardItem {
+                product_id: product,
+                qty_milli: Qty::from_milli(30).unwrap(),
+            }],
+        };
+        let event = build_crm_tech_card(
+            channel,
+            Uuid::new_v4(),
+            card.clone(),
+            Some(&"ab".repeat(32)),
+        )
+        .unwrap()
+        .sign_with_keys(&keys)
+        .unwrap();
+        assert_eq!(u32::from(event.kind.as_u16()), KIND_CRM_TECH_CARD);
+        assert_eq!(tag_values(&event, "expected-revision").len(), 1);
+        assert!(build_crm_tech_card(channel, Uuid::new_v4(), card, Some("zz")).is_err());
+    }
+
     #[test]
     fn appointment_builder_validates_and_tags() {
         let channel = Uuid::new_v4();

@@ -17,6 +17,9 @@ pub const KIND_CRM_PRODUCT: u16 = 42102;
 pub const KIND_CRM_PARTY: u16 = 42103;
 pub const KIND_CRM_SALE: u16 = 42104;
 pub const KIND_CRM_SALE_VOID: u16 = 42105;
+pub const KIND_CRM_STOCK_DOC: u16 = 42106;
+pub const KIND_CRM_STOCK_DOC_VOID: u16 = 42107;
+pub const KIND_CRM_TECH_CARD: u16 = 42108;
 pub const KIND_CRM_FISCAL_RECEIPT: u16 = 42120;
 pub const KIND_CRM_CASH_SHIFT: u16 = 42121;
 pub const KIND_CRM_STAFF: u16 = 42131;
@@ -159,6 +162,12 @@ pub async fn grant_community_role(pool: &sqlx::PgPool, community: Uuid, keys: &K
 /// rows directly is test-only; the relay never deletes CRM rows.
 pub async fn cleanup_space(pool: &sqlx::PgPool, community: Uuid) {
     for sql in [
+        "DELETE FROM crm_tech_card_items WHERE community_id = $1",
+        "DELETE FROM crm_tech_cards WHERE community_id = $1",
+        "DELETE FROM crm_stock_moves WHERE community_id = $1",
+        "DELETE FROM crm_stock WHERE community_id = $1",
+        "DELETE FROM crm_stock_doc_lines WHERE community_id = $1",
+        "DELETE FROM crm_stock_docs WHERE community_id = $1",
         "DELETE FROM crm_fiscal_receipts WHERE community_id = $1",
         "DELETE FROM crm_cash_shifts WHERE community_id = $1",
         "DELETE FROM crm_sale_payments WHERE community_id = $1",
@@ -280,4 +289,25 @@ pub async fn fresh_space(pool: &sqlx::PgPool) -> (Keys, Uuid, Uuid) {
     grant_community_role(pool, community, &owner, "admin").await;
     accept(&owner, &space_create(&owner, channel, Uuid::new_v4())).await;
     (owner, channel, community)
+}
+
+/// Receive 100 units of each product on `warehouse` (kind 42106), so sales
+/// pass the space's no-negative-stock rule.
+pub async fn stock_up(keys: &Keys, channel: Uuid, warehouse: Uuid, products: &[Uuid]) {
+    let lines: Vec<Value> = products
+        .iter()
+        .map(|id| json!({"product_id": id, "qty_milli": 100_000, "cost_minor": 1_000}))
+        .collect();
+    let payload = json!({"v": 1, "type": "receipt", "warehouse_id": warehouse, "lines": lines});
+    let event = sign(
+        keys,
+        KIND_CRM_STOCK_DOC,
+        &payload.to_string(),
+        vec![
+            tag(&["h", &channel.to_string()]),
+            tag(&["crm-id", &Uuid::new_v4().to_string()]),
+        ],
+    );
+    let (status, accepted, message) = submit(keys, &event).await;
+    assert!(status == 200 && accepted, "stock up: {status} {message}");
 }
