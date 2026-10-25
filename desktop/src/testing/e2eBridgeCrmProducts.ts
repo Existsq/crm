@@ -250,3 +250,8 @@ export function handleCrmProductMockCommand(
       return undefined;
   }
 }
+
+/** The mock product `productId`, for the sales mock's line lookups. */
+export function mockCrmProductById(productId: string): RawCrmProduct | null {
+  return products.find((p) => p.id === productId) ?? null;
+}

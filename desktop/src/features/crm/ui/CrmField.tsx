@@ -50,7 +50,11 @@ export function CrmField({
         </p>
       ) : null}
       {error ? (
-        <p className="text-xs text-destructive" id={`${id}-error`}>
+        <p
+          className="text-xs text-destructive"
+          data-testid={`${id}-error`}
+          id={`${id}-error`}
+        >
           {error}
         </p>
       ) : null}

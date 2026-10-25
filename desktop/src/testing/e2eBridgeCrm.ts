@@ -20,6 +20,12 @@ import {
   type MockCrmProductSeed,
   seedMockCrmProducts,
 } from "./e2eBridgeCrmProducts.ts";
+import {
+  handleCrmSalesMockCommand,
+  type MockCrmPartySeed,
+  type MockCrmSaleSeed,
+  seedMockCrmSales,
+} from "./e2eBridgeCrmSales.ts";
 import { KIND_CRM_PRODUCT } from "@/features/crm/lib/crmKinds";
 
 type RawSettings = Extract<RawCrmSpace, { member: true }>["settings"];
@@ -57,6 +63,8 @@ export type MockCrmSeed = {
     settings?: Partial<RawSettings>;
     warehouses?: Array<{ id: string; name: string; is_default?: boolean }>;
     products?: MockCrmProductSeed[];
+    parties?: MockCrmPartySeed[];
+    sales?: MockCrmSaleSeed[];
   } | null;
 };
 
@@ -127,10 +135,16 @@ function revision(): string {
 export function resetMockCrm(): void {
   state = { canCreate: true, space: null, loseNextWriteResponse: false };
   seedMockCrmProducts([]);
+  seedMockCrmSales();
 }
 
 export function seedMockCrm(seed: MockCrmSeed): void {
   seedMockCrmProducts(seed.space?.products ?? []);
+  seedMockCrmSales(
+    seed.space?.parties ?? [],
+    seed.space?.sales ?? [],
+    seed.space?.warehouses?.[0]?.id ?? null,
+  );
   state = {
     canCreate: seed.canCreate ?? true,
     loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
@@ -333,6 +347,12 @@ export function handleCrmMockCommand(
         ),
       };
     default: {
+      const sales = handleCrmSalesMockCommand(command, payload, {
+        channelId: state.space?.role ? state.space.channelId : null,
+        warehouses: state.space?.warehouses ?? [],
+        requireCapability,
+      });
+      if (sales) return sales;
       const result = handleCrmProductMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

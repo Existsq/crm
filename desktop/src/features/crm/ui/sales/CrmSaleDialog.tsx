@@ -146,8 +146,12 @@ export function CrmSaleDialog({
   const [productSearch, setProductSearch] = React.useState("");
   const productQ = useDebouncedValue(productSearch.trim(), SEARCH_DEBOUNCE_MS);
   const products = useCrmProductsQuery({ q: productQ, archived: false });
+  // Only results for what is typed now: while a new search is debounced or
+  // loading, the previous matches would put the wrong product on the sale.
   const productMatches =
-    productQ.length > 0
+    productQ.length > 0 &&
+    productQ === productSearch.trim() &&
+    !products.isPlaceholderData
       ? (products.data?.pages[0]?.products ?? []).slice(0, PICKER_LIMIT)
       : [];
 
@@ -162,7 +166,9 @@ export function CrmSaleDialog({
     archived: false,
   });
   const customerMatches =
-    customerQ.length > 0
+    customerQ.length > 0 &&
+    customerQ === customerSearch.trim() &&
+    !customers.isPlaceholderData
       ? (customers.data?.pages[0]?.parties ?? []).slice(0, PICKER_LIMIT)
       : [];
 
@@ -263,7 +269,9 @@ export function CrmSaleDialog({
                 id="crm-sale-product-search"
                 items={productMatches}
                 label={dialog.productSearch}
-                loading={products.isFetching}
+                loading={
+                  products.isFetching || productQ !== productSearch.trim()
+                }
                 onPick={(product) => {
                   setLines((current) => addProductToLines(current, product));
                   setProductSearch("");
@@ -286,7 +294,9 @@ export function CrmSaleDialog({
                 id="crm-sale-customer-search"
                 items={customerMatches}
                 label={dialog.customerSearch}
-                loading={customers.isFetching}
+                loading={
+                  customers.isFetching || customerQ !== customerSearch.trim()
+                }
                 onPick={(party) => {
                   setCustomer(party);
                   setCustomerSearch("");
