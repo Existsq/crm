@@ -279,7 +279,7 @@ enum Cmd {
     /// Community moderation — reports queue, bans, timeouts, audit trail
     #[command(subcommand)]
     Moderation(ModerationCmd),
-    /// Retail CRM — space, warehouses, products, customers, sales, analytics (kinds 42100–42199)
+    /// Retail CRM — space, warehouses, products, customers, sales, stock, analytics (kinds 42100–42199)
     #[command(subcommand)]
     Crm(CrmCmd),
 }
@@ -301,6 +301,9 @@ pub enum CrmCmd {
     /// List, post or void sales
     #[command(subcommand)]
     Sales(CrmSalesCmd),
+    /// Stock levels, movements, receipts, write-offs, inventories, transfers and tech cards
+    #[command(subcommand)]
+    Stock(CrmStockCmd),
     /// Sales and customer analytics (GET /crm/analytics)
     Analytics {
         /// First day, YYYY-MM-DD (default: 29 days before --to)
@@ -625,6 +628,113 @@ pub enum CrmSalesCmd {
         /// Why the sale is voided
         #[arg(long)]
         reason: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CrmStockCmd {
+    /// Quantity and cost value of each product (GET /crm/stock)
+    Levels {
+        /// One warehouse UUID (default: all warehouses summed)
+        #[arg(long)]
+        warehouse: Option<String>,
+        /// Search names and SKUs
+        #[arg(long)]
+        q: Option<String>,
+        /// Only products at or below their minimum stock
+        #[arg(long)]
+        low: bool,
+    },
+    /// The movement journal, newest first (GET /crm/stock/moves)
+    Moves {
+        /// Only this warehouse (UUID)
+        #[arg(long)]
+        warehouse: Option<String>,
+        /// Only this product (UUID)
+        #[arg(long)]
+        product: Option<String>,
+        /// Page size (1–500, default 100)
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Cursor from the previous page's `next`
+        #[arg(long)]
+        before: Option<i64>,
+    },
+    /// Stock documents, newest first (GET /crm/stock/docs)
+    Docs {
+        /// receipt, write-off, inventory or transfer
+        #[arg(long = "type")]
+        doc_type: Option<String>,
+        /// Page size (1–500, default 100)
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Cursor from the previous page's `next` (a document number)
+        #[arg(long)]
+        before: Option<i64>,
+    },
+    /// Show one stock document with its lines (GET /crm/stock/docs/{id})
+    Doc {
+        /// Document UUID
+        #[arg(long)]
+        doc: String,
+    },
+    /// Post a receipt, write-off, inventory or transfer (kind 42106)
+    Post {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// receipt, write-off, inventory or transfer
+        #[arg(long = "type")]
+        doc_type: String,
+        /// Warehouse UUID (default: the space's default warehouse)
+        #[arg(long)]
+        warehouse: Option<String>,
+        /// Destination warehouse UUID (transfers)
+        #[arg(long)]
+        to_warehouse: Option<String>,
+        /// Supplier party UUID (receipts)
+        #[arg(long)]
+        supplier: Option<String>,
+        /// Supplier invoice number (receipts)
+        #[arg(long)]
+        reference: Option<String>,
+        /// PRODUCT_UUID:QTY[:COST] in units and rubles; COST is the purchase
+        /// price per unit (required on receipts); for an inventory QTY is the
+        /// counted quantity (repeat per product)
+        #[arg(long = "line", required = true)]
+        lines: Vec<String>,
+        /// Note (the reason of a write-off)
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Void (сторно) a stock document (kind 42107; owner/admin only)
+    Void {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Document UUID
+        #[arg(long)]
+        doc: String,
+        /// Why the document is voided
+        #[arg(long)]
+        reason: String,
+    },
+    /// The consumables of every service (GET /crm/tech-cards)
+    TechCards,
+    /// Set the consumables written off with each unit of a service (kind 42108)
+    TechCard {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Service product UUID
+        #[arg(long)]
+        service: String,
+        /// PRODUCT_UUID:QTY per service unit (repeat; none clears the card)
+        #[arg(long = "item")]
+        items: Vec<String>,
+        /// Current revision from `buzz crm stock tech-cards` (required to replace a card)
+        #[arg(long)]
+        expected_revision: Option<String>,
     },
 }
 

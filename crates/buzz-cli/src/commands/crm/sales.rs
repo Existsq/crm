@@ -169,7 +169,7 @@ async fn catalog_price(client: &BuzzClient, product: uuid::Uuid) -> Result<Money
         .ok_or_else(|| CliError::Other(format!("product {product} has no price")))
 }
 
-async fn default_warehouse(client: &BuzzClient) -> Result<uuid::Uuid, CliError> {
+pub(super) async fn default_warehouse(client: &BuzzClient) -> Result<uuid::Uuid, CliError> {
     let space: serde_json::Value = serde_json::from_str(&client.get_authed("/crm/space").await?)
         .map_err(|e| CliError::Other(format!("unexpected /crm/space response: {e}")))?;
     space["warehouses"]
