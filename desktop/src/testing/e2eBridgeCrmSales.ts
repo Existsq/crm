@@ -33,6 +33,13 @@ type MockAccess = {
   channelId: string | null;
   warehouses: Array<{ id: string; name: string; archived: boolean }>;
   requireCapability: (capability: CrmCapability) => void;
+  /** Stock effects of a sale; throws, with nothing applied, when short. */
+  postSaleStock: (
+    saleId: string,
+    warehouseId: string,
+    lines: ReadonlyArray<{ product_id: string; qty_milli: number }>,
+  ) => void;
+  voidSaleStock: (saleId: string) => void;
 };
 
 type MockParty = {
@@ -354,6 +361,7 @@ function postSale(
   if (tendered !== null && (cash === undefined || tendered < cash)) {
     throw "relay error 400: invalid: cash_tendered_minor: is less than the cash part of the payment";
   }
+  access.postSaleStock(input.sale_id, input.warehouse_id, lines);
   sales.push({
     id: input.sale_id,
     number: sales.length + 1,
@@ -385,6 +393,7 @@ function voidSale(
   if (payload.reason.trim() === "") {
     throw "relay error 400: invalid: reason: must not be empty";
   }
+  access.voidSaleStock(sale.id);
   sale.void = {
     voided_at: new Date().toISOString(),
     reason: payload.reason.trim(),
@@ -554,4 +563,9 @@ export function handleCrmSalesMockCommand(
     default:
       return undefined;
   }
+}
+
+/** The mock party `partyId`, for the stock mock's supplier checks. */
+export function mockCrmPartyById(partyId: string) {
+  return parties.find((party) => party.id === partyId);
 }

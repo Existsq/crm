@@ -36,15 +36,31 @@ const DUPLICATE_CONFLICTS: ReadonlyArray<{
   },
 ];
 
+/** Stock rejections name the product; say what to do about them. */
+const STOCK_REJECTIONS: ReadonlyArray<{ pattern: RegExp; template: string }> = [
+  {
+    pattern: /not enough stock of "(.+?)" to void/,
+    template: ru.errors.stockAlreadyUsed,
+  },
+  {
+    pattern: /not enough stock of "(.+?)"/,
+    template: ru.errors.notEnoughStock,
+  },
+];
+
 function relayMessage(
   prefix: (typeof RELAY_PREFIXES)[number],
   reason: string,
 ): string {
-  if (prefix === "conflict") {
-    for (const { pattern, template } of DUPLICATE_CONFLICTS) {
-      const match = pattern.exec(reason);
-      if (match) return template.replace("{value}", match[1]);
-    }
+  const templates =
+    prefix === "conflict"
+      ? DUPLICATE_CONFLICTS
+      : prefix === "invalid"
+        ? STOCK_REJECTIONS
+        : [];
+  for (const { pattern, template } of templates) {
+    const match = pattern.exec(reason);
+    if (match) return template.replace("{value}", match[1]);
   }
   return ru.errors[prefix];
 }

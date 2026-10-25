@@ -78,3 +78,17 @@ test("unrecognised failures keep the raw text as detail", () => {
     detail: null,
   });
 });
+
+test("stock rejections name the product and the way out", () => {
+  const short = describeCrmError(
+    'relay error 400: invalid: lines: not enough stock of "Шампунь": 0 on hand, 2 requested',
+  );
+  assert.equal(short.kind, "invalid");
+  assert.match(short.message, /«Шампунь»/);
+  assert.match(short.message, /поступление/);
+  const used = describeCrmError(
+    'relay error 400: invalid: not enough stock of "Воск" to void the document: the goods were already used',
+  );
+  assert.match(used.message, /нельзя отменить/);
+  assert.match(used.message, /«Воск»/);
+});
