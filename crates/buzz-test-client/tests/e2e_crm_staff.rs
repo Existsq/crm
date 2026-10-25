@@ -16,24 +16,6 @@ use nostr::Keys;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-fn crm_event(
-    keys: &Keys,
-    kind: u16,
-    channel: Uuid,
-    id: Option<Uuid>,
-    payload: &Value,
-    expected_revision: Option<&str>,
-) -> nostr::Event {
-    let mut tags = vec![tag(&["h", &channel.to_string()])];
-    if let Some(id) = id {
-        tags.push(tag(&["crm-id", &id.to_string()]));
-    }
-    if let Some(revision) = expected_revision {
-        tags.push(tag(&["expected-revision", revision]));
-    }
-    sign(keys, kind, &payload.to_string(), tags)
-}
-
 fn service(name: &str, payment_object: &str, duration: Option<u32>) -> Value {
     let mut value = json!({
         "v": 1,
@@ -63,47 +45,11 @@ fn schedule(staff_id: Uuid, days: Value) -> Value {
     json!({ "v": 1, "staff_id": staff_id, "days": days })
 }
 
-async fn get(keys: Option<&Keys>, path_and_query: &str) -> (u16, Value) {
-    let mut request = http().get(format!("{}{path_and_query}", relay_http_url()));
-    if let Some(keys) = keys {
-        request = request.header("X-Pubkey", keys.public_key().to_hex());
-    }
-    let resp = request.send().await.expect("GET");
-    let status = resp.status().as_u16();
-    (status, resp.json().await.unwrap_or(Value::Null))
-}
-
-async fn accept(keys: &Keys, event: &nostr::Event) {
-    let (status, accepted, message) = submit(keys, event).await;
-    assert!(
-        status == 200 && accepted && message.is_empty(),
-        "{status} {message}"
-    );
-}
-
-async fn reject(keys: &Keys, event: &nostr::Event, prefix: &str) {
-    let (status, accepted, message) = submit(keys, event).await;
-    assert!(
-        !accepted && message.starts_with(prefix),
-        "expected {prefix}, got {status} {message}"
-    );
-}
-
-async fn space(pool: &sqlx::PgPool) -> (Keys, Uuid, Uuid) {
-    let owner = Keys::generate();
-    let channel = create_channel(&owner, "private").await;
-    let community = community_of(pool, channel).await;
-    cleanup_space(pool, community).await;
-    grant_community_role(pool, community, &owner, "admin").await;
-    accept(&owner, &space_create(&owner, channel, Uuid::new_v4())).await;
-    (owner, channel, community)
-}
-
 #[tokio::test]
 #[ignore = "requires a running relay"]
 async fn services_carry_durations_and_list_separately() {
     let pool = pool().await;
-    let (owner, channel, community) = space(&pool).await;
+    let (owner, channel, community) = fresh_space(&pool).await;
 
     let haircut = Uuid::new_v4();
     accept(
@@ -174,7 +120,7 @@ async fn services_carry_durations_and_list_separately() {
 #[ignore = "requires a running relay"]
 async fn staff_are_created_updated_and_scheduled() {
     let pool = pool().await;
-    let (owner, channel, community) = space(&pool).await;
+    let (owner, channel, community) = fresh_space(&pool).await;
     let member = Keys::generate();
     let guest = Keys::generate();
     add_member(&owner, channel, &member, "member").await;

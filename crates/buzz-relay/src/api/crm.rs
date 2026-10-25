@@ -24,6 +24,7 @@ use crate::{
     state::AppState,
 };
 
+pub mod appointments;
 pub mod parties;
 pub mod products;
 pub mod sales;

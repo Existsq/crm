@@ -21,6 +21,7 @@ pub const KIND_CRM_FISCAL_RECEIPT: u16 = 42120;
 pub const KIND_CRM_CASH_SHIFT: u16 = 42121;
 pub const KIND_CRM_STAFF: u16 = 42131;
 pub const KIND_CRM_STAFF_SCHEDULE: u16 = 42132;
+pub const KIND_CRM_APPOINTMENT: u16 = 42133;
 
 pub fn relay_url() -> String {
     std::env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:3000".to_string())
@@ -163,6 +164,7 @@ pub async fn cleanup_space(pool: &sqlx::PgPool, community: Uuid) {
         "DELETE FROM crm_sale_payments WHERE community_id = $1",
         "DELETE FROM crm_sale_lines WHERE community_id = $1",
         "DELETE FROM crm_sales WHERE community_id = $1",
+        "DELETE FROM crm_appointments WHERE community_id = $1",
         "DELETE FROM crm_parties WHERE community_id = $1",
         "DELETE FROM crm_staff_days WHERE community_id = $1",
         "DELETE FROM crm_staff WHERE community_id = $1",
@@ -217,4 +219,65 @@ pub fn space_create(keys: &Keys, channel: Uuid, warehouse: Uuid) -> nostr::Event
         &content.to_string(),
         vec![tag(&["h", &channel.to_string()])],
     )
+}
+
+/// A CRM event on `channel`, with the optional `crm-id` and
+/// `expected-revision` tags.
+pub fn crm_event(
+    keys: &Keys,
+    kind: u16,
+    channel: Uuid,
+    id: Option<Uuid>,
+    payload: &Value,
+    expected_revision: Option<&str>,
+) -> nostr::Event {
+    let mut tags = vec![tag(&["h", &channel.to_string()])];
+    if let Some(id) = id {
+        tags.push(tag(&["crm-id", &id.to_string()]));
+    }
+    if let Some(revision) = expected_revision {
+        tags.push(tag(&["expected-revision", revision]));
+    }
+    sign(keys, kind, &payload.to_string(), tags)
+}
+
+/// `GET` a relay path, optionally as `keys`; returns status and JSON body.
+pub async fn get(keys: Option<&Keys>, path_and_query: &str) -> (u16, Value) {
+    let mut request = http().get(format!("{}{path_and_query}", relay_http_url()));
+    if let Some(keys) = keys {
+        request = request.header("X-Pubkey", keys.public_key().to_hex());
+    }
+    let resp = request.send().await.expect("GET");
+    let status = resp.status().as_u16();
+    (status, resp.json().await.unwrap_or(Value::Null))
+}
+
+/// Submit and assert the relay accepted the event.
+pub async fn accept(keys: &Keys, event: &nostr::Event) {
+    let (status, accepted, message) = submit(keys, event).await;
+    assert!(
+        status == 200 && accepted && message.is_empty(),
+        "{status} {message}"
+    );
+}
+
+/// Submit and assert the relay rejected the event with `prefix`.
+pub async fn reject(keys: &Keys, event: &nostr::Event, prefix: &str) -> String {
+    let (status, accepted, message) = submit(keys, event).await;
+    assert!(
+        !accepted && message.starts_with(prefix),
+        "expected {prefix}, got {status} {message}"
+    );
+    message
+}
+
+/// A fresh space owned by a new community admin: `(owner, channel, community)`.
+pub async fn fresh_space(pool: &sqlx::PgPool) -> (Keys, Uuid, Uuid) {
+    let owner = Keys::generate();
+    let channel = create_channel(&owner, "private").await;
+    let community = community_of(pool, channel).await;
+    cleanup_space(pool, community).await;
+    grant_community_role(pool, community, &owner, "admin").await;
+    accept(&owner, &space_create(&owner, channel, Uuid::new_v4())).await;
+    (owner, channel, community)
 }
