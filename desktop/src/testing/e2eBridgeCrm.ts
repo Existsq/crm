@@ -26,9 +26,12 @@ import {
   seedMockCrmCash,
 } from "./e2eBridgeCrmCash.ts";
 import {
+  checkMockAppointmentPayable,
   handleCrmAppointmentMockCommand,
   type MockCrmAppointmentSeed,
+  payMockAppointment,
   seedMockCrmAppointments,
+  unpayMockAppointment,
 } from "./e2eBridgeCrmAppointments.ts";
 import {
   handleCrmSalesMockCommand,
@@ -371,12 +374,29 @@ export function handleCrmMockCommand(
         ),
       };
     default: {
+      const visitId =
+        command === "crm_post_sale"
+          ? (payload as { input: { appointment_id?: string | null } }).input
+              .appointment_id
+          : null;
+      if (visitId) checkMockAppointmentPayable(visitId);
       const sales = handleCrmSalesMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         warehouses: state.space?.warehouses ?? [],
         requireCapability,
       });
-      if (sales) return sales;
+      if (sales) {
+        if (visitId) {
+          payMockAppointment(
+            visitId,
+            (payload as { input: { sale_id: string } }).input.sale_id,
+          );
+        }
+        if (command === "crm_void_sale") {
+          unpayMockAppointment((payload as { saleId: string }).saleId);
+        }
+        return sales;
+      }
       const cash = handleCrmCashMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

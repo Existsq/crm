@@ -17,7 +17,9 @@ import {
   type CashPaymentDraft,
 } from "@/features/crm/lib/cashPayment";
 import { describeCrmError } from "@/features/crm/lib/crmErrors";
+import { clientLabel } from "@/features/crm/lib/journal";
 import { formatRubles } from "@/features/crm/lib/money";
+import { formatClock, fromIsoDate } from "@/features/crm/lib/schedule";
 import {
   addProductToLines,
   evaluateLine,
@@ -30,11 +32,13 @@ import { CrmCashPayment } from "@/features/crm/ui/cash/CrmCashPayment";
 import { CrmCashQueue } from "@/features/crm/ui/cash/CrmCashQueue";
 import { CrmCashScanner } from "@/features/crm/ui/cash/CrmCashScanner";
 import { CrmCashShiftCard } from "@/features/crm/ui/cash/CrmCashShiftCard";
+import { useVisitCheckout } from "@/features/crm/ui/cash/useVisitCheckout";
 import { CrmField, crmControlProps } from "@/features/crm/ui/CrmField";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
 import { useDebouncedValue } from "@/features/crm/ui/products/useDebouncedValue";
 import { CrmSearchPicker } from "@/features/crm/ui/sales/CrmSearchPicker";
 import type { CrmMemberSpace } from "@/shared/api/tauriCrm";
+import type { CrmAppointment } from "@/shared/api/tauriCrmAppointments";
 import { getCrmSale, type CrmParty } from "@/shared/api/tauriCrmSales";
 import { Button } from "@/shared/ui/button";
 import { NativeSelect } from "@/shared/ui/native-select";
@@ -114,13 +118,77 @@ function CustomerPicker({
   );
 }
 
+function VisitBanner({
+  error,
+  loading,
+  onUnlink,
+  visit,
+}: {
+  error: unknown;
+  loading: boolean;
+  onUnlink: () => void;
+  visit: CrmAppointment | null;
+}) {
+  const v = ru.cash.visit;
+  if (error)
+    return <CrmErrorAlert error={error} testId="crm-cash-visit-error" />;
+  if (loading || !visit) {
+    return (
+      <p className="text-sm text-muted-foreground" role="status">
+        {v.loading}
+      </p>
+    );
+  }
+  const date = fromIsoDate(visit.date).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+  });
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/40 bg-sky-500/5 px-3 py-2"
+      data-testid="crm-cash-visit"
+    >
+      <div className="min-w-0 text-sm">
+        <p className="font-medium">{v.title}</p>
+        <p className="truncate text-muted-foreground">
+          {visit.saleId
+            ? v.alreadyPaid
+            : v.detail
+                .replace("{client}", clientLabel(visit))
+                .replace("{date}", date)
+                .replace("{time}", formatClock(visit.start))}
+        </p>
+      </div>
+      <Button
+        data-testid="crm-cash-visit-unlink"
+        onClick={onUnlink}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        {v.unlink}
+      </Button>
+    </div>
+  );
+}
+
 /**
  * The cash desk: ring up goods, take the payment and print the fiscal
  * receipt on the ATOL register. The sale is posted to the relay before the
  * receipt is printed (ADR-0003); a receipt that cannot print stays in the
  * durable queue below.
  */
-export function CrmCashSection({ space }: { space: CrmMemberSpace }) {
+export function CrmCashSection({
+  onVisitDone,
+  space,
+  visit,
+}: {
+  /** Drops the visit from the address once it is paid or unlinked. */
+  onVisitDone: () => void;
+  space: CrmMemberSpace;
+  /** Booked visit to take payment for, from the journal. */
+  visit: string | null;
+}) {
   const pay = ru.cash.pay;
   const canPost = space.capabilities.has("post_documents");
   const canFiscalize = space.capabilities.has("record_fiscal");
@@ -142,6 +210,27 @@ export function CrmCashSection({ space }: { space: CrmMemberSpace }) {
     React.useState<CashPaymentDraft>(newCashPayment);
   const [submitted, setSubmitted] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+
+  // A visit from the journal fills the cart once; the sale then pays for it.
+  const checkout = useVisitCheckout(visit);
+  const [appliedVisit, setAppliedVisit] = React.useState<string | null>(null);
+  const loaded = checkout.data;
+  React.useEffect(() => {
+    if (!loaded || loaded.visit.saleId || appliedVisit === loaded.visit.id) {
+      return;
+    }
+    setAppliedVisit(loaded.visit.id);
+    setLines(loaded.lines);
+    setCustomer(loaded.customer);
+    setSaleId(crypto.randomUUID());
+  }, [loaded, appliedVisit]);
+  React.useEffect(() => {
+    if (visit === null) setAppliedVisit(null);
+  }, [visit]);
+  const payingVisit =
+    visit !== null && loaded && appliedVisit === visit && !loaded.visit.saleId
+      ? loaded.visit
+      : null;
 
   const totals = saleTotals(lines);
   const evaluatedLines = lines.map(evaluateLine);
@@ -182,6 +271,7 @@ export function CrmCashSection({ space }: { space: CrmMemberSpace }) {
         cashTenderedMinor: evaluatedPayment.cashTenderedMinor,
         lines: evaluatedLines.flatMap((line) => (line.ok ? [line.line] : [])),
         note: null,
+        appointmentId: payingVisit?.id ?? null,
       });
     } catch {
       setBusy(false);
@@ -189,6 +279,7 @@ export function CrmCashSection({ space }: { space: CrmMemberSpace }) {
     }
     const posted = saleId;
     reset();
+    if (payingVisit) onVisitDone();
     const number = await getCrmSale(posted)
       .then((sale) => String(sale.number))
       .catch(() => "");
@@ -247,6 +338,14 @@ export function CrmCashSection({ space }: { space: CrmMemberSpace }) {
                 setLines((current) => addProductToLines(current, product))
               }
             />
+            {visit !== null ? (
+              <VisitBanner
+                error={checkout.error}
+                loading={checkout.isPending}
+                onUnlink={onVisitDone}
+                visit={loaded?.visit ?? null}
+              />
+            ) : null}
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium">{ru.cash.cart.title}</h3>
               {lines.length > 0 ? (

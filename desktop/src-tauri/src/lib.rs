@@ -800,6 +800,7 @@ pub fn run() {
             crm_write_staff,
             crm_set_schedule,
             crm_list_appointments,
+            crm_get_appointment,
             crm_get_slots,
             crm_write_appointment,
             cash_get_settings,

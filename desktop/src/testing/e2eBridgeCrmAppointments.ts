@@ -303,6 +303,41 @@ function writeAppointment(
   return { event_id: revision, entity_id: next.id };
 }
 
+/** Throw the relay's rejection when a sale may not pay for `appointmentId`. */
+export function checkMockAppointmentPayable(appointmentId: string): void {
+  const visit = appointments.find((a) => a.id === appointmentId);
+  if (!visit) {
+    throw "relay rejected event: invalid: appointment_id: not an appointment of this CRM space";
+  }
+  if (visit.sale_id) {
+    throw "relay error 409: conflict: the visit is already paid";
+  }
+  if (!holdsTime(visit.status)) {
+    throw "relay rejected event: invalid: appointment_id: a cancelled or missed visit cannot be paid";
+  }
+}
+
+/** Link a posted sale to its visit, as the relay does for kind 42104. */
+export function payMockAppointment(
+  appointmentId: string,
+  saleId: string,
+): void {
+  appointments = appointments.map((a) =>
+    a.id === appointmentId
+      ? { ...a, sale_id: saleId, status: "done", revision: eventId() }
+      : a,
+  );
+}
+
+/** Unlink a voided sale from its visit, as the relay does for kind 42105. */
+export function unpayMockAppointment(saleId: string): void {
+  appointments = appointments.map((a) =>
+    a.sale_id === saleId
+      ? { ...a, sale_id: null, status: "arrived", revision: eventId() }
+      : a,
+  );
+}
+
 /** Handle a journal command, or `undefined` for anything else. */
 export function handleCrmAppointmentMockCommand(
   command: string,
@@ -317,6 +352,13 @@ export function handleCrmAppointmentMockCommand(
           access,
         ),
       };
+    case "crm_get_appointment": {
+      requireMember(access);
+      const id = (payload as { appointmentId: string }).appointmentId;
+      const visit = appointments.find((a) => a.id === id);
+      if (!visit) throw "relay error 404: appointment not found";
+      return { value: withClient(visit) };
+    }
     case "crm_get_slots":
       return {
         value: getSlots(payload as Parameters<typeof getSlots>[0], access),

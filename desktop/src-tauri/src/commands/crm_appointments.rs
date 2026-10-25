@@ -63,6 +63,16 @@ pub async fn crm_list_appointments(
     get_relay_json::<Value>(&state, &path).await
 }
 
+/// `GET /crm/appointments/{id}` as returned by the relay.
+#[tauri::command]
+pub async fn crm_get_appointment(
+    appointment_id: String,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let id = parse_uuid(&appointment_id, "appointment id")?;
+    get_relay_json::<Value>(&state, &format!("/crm/appointments/{id}")).await
+}
+
 /// `GET /crm/slots` as returned by the relay.
 #[tauri::command]
 pub async fn crm_get_slots(

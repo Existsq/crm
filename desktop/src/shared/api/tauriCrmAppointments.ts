@@ -204,6 +204,16 @@ export async function listCrmCustomerAppointments(
   return raw.appointments.map(fromRawCrmAppointment);
 }
 
+export async function getCrmAppointment(
+  appointmentId: string,
+): Promise<CrmAppointment> {
+  return fromRawCrmAppointment(
+    await invokeTauri<RawCrmAppointment>("crm_get_appointment", {
+      appointmentId,
+    }),
+  );
+}
+
 export async function getCrmSlots(request: {
   date: string;
   serviceIds: string[];

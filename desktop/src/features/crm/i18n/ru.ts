@@ -341,6 +341,7 @@ export const ru = {
       total: "Итого: {duration}, {total}",
       submitCreate: "Записать",
       cancelVisit: "Отменить запись",
+      pay: "Оплатить в кассе",
       created: "Клиент записан",
       saved: "Запись сохранена",
       cancelled: "Запись отменена",
@@ -350,6 +351,16 @@ export const ru = {
         time: "Выберите время.",
       },
     },
+  },
+  visits: {
+    title: "Визиты",
+    never: "Клиент ещё не записывался.",
+    count: "Визитов",
+    noShows: "Не пришёл",
+    last: "Последний визит",
+    next: "Следующая запись",
+    recent: "Последние записи",
+    item: "{date}, {time} · {services}",
   },
   schedule: {
     title: "График работы",
@@ -591,6 +602,14 @@ export const ru = {
   cash: {
     title: "Касса",
     readOnlyHint: "У вашей роли нет права работать на кассе.",
+    visit: {
+      title: "Оплата визита",
+      detail: "{client} · {date}, {time}",
+      unlink: "Отвязать визит",
+      loading: "Загрузка визита…",
+      loadError: "Не удалось загрузить визит.",
+      alreadyPaid: "Этот визит уже оплачен.",
+    },
     device: {
       title: "ККМ",
       checking: "Проверка связи с ККМ…",

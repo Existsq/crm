@@ -8,6 +8,7 @@ import { formatDuration } from "@/features/crm/lib/catalog";
 import {
   type AppointmentDraft,
   draftFromAppointment,
+  holdsTime,
   MAX_APPOINTMENT_SERVICES,
   servicesTotal,
   staffServices,
@@ -224,6 +225,7 @@ function ClientFields({
 export function CrmAppointmentDialog({
   onCloseAutoFocus,
   onOpenChange,
+  onPay,
   open,
   services,
   space,
@@ -232,6 +234,8 @@ export function CrmAppointmentDialog({
 }: {
   onCloseAutoFocus: (event: Event) => void;
   onOpenChange: (open: boolean) => void;
+  /** Take payment for the visit at the cash desk; `null` without the right. */
+  onPay: ((appointmentId: string) => void) | null;
   open: boolean;
   /** Active bookable services; `null` while loading. */
   services: readonly CrmProduct[] | null;
@@ -635,21 +639,37 @@ export function CrmAppointmentDialog({
 
           <CrmErrorAlert error={write.error} testId="crm-appointment-error" />
           <DialogFooter className="sm:justify-between">
-            {editing && editing.status !== "cancelled" ? (
-              <Button
-                data-testid="crm-appointment-cancel-visit"
-                disabled={write.isPending}
-                onClick={() =>
-                  void save(
-                    statusWrite(editing, space.channelId, "cancelled"),
-                    d.cancelled,
-                  )
-                }
-                type="button"
-                variant="outline"
-              >
-                {d.cancelVisit}
-              </Button>
+            {editing && editing.status !== "cancelled" && !paid ? (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {onPay && !paid && holdsTime(editing.status) ? (
+                  <Button
+                    data-testid="crm-appointment-pay"
+                    disabled={write.isPending}
+                    onClick={() => {
+                      onOpenChange(false);
+                      onPay(editing.id);
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    {d.pay}
+                  </Button>
+                ) : null}
+                <Button
+                  data-testid="crm-appointment-cancel-visit"
+                  disabled={write.isPending}
+                  onClick={() =>
+                    void save(
+                      statusWrite(editing, space.channelId, "cancelled"),
+                      d.cancelled,
+                    )
+                  }
+                  type="button"
+                  variant="outline"
+                >
+                  {d.cancelVisit}
+                </Button>
+              </div>
             ) : (
               <span />
             )}
