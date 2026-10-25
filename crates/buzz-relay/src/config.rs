@@ -1219,6 +1219,12 @@ impl Config {
         }
 
         let booking = crate::api::public_booking::BookingConfig::from_env()?;
+        if booking.sms == crate::api::public_booking::sms::SmsProvider::Log {
+            tracing::warn!(
+                "BUZZ_BOOKING_SMS=log — online booking codes go to the relay log, not to \
+                 clients; set BUZZ_BOOKING_SMS=smsru for a public booking page"
+            );
+        }
         if booking.expose_codes {
             tracing::warn!(
                 "BUZZ_BOOKING_EXPOSE_CODES=true — booking phone codes are returned to clients; \

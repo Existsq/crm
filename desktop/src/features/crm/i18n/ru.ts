@@ -317,6 +317,8 @@ export const ru = {
     staffLabel: "Мастера на странице",
     servicesLabel: "Услуги на странице",
     allWhenNoneHint: "Если ничего не отмечено, доступны все.",
+    allSelected: "Сейчас на странице: все",
+    someSelected: (count: number) => `Сейчас на странице: отмечено ${count}`,
     staffEmpty: "Сотрудников пока нет.",
     servicesEmpty: "Услуг с длительностью пока нет.",
     choicesLoading: "Загрузка…",

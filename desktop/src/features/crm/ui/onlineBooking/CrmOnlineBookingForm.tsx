@@ -69,10 +69,18 @@ export function CrmOnlineBookingForm({
   const conflicted =
     write.error !== null && describeCrmError(write.error).kind === "conflict";
 
+  // The server revision last adopted. Only a newer server revision is
+  // adopted, so a refetch still holding the pre-save revision cannot roll
+  // the form back after a successful save.
+  const [seenRevision, setSeenRevision] = React.useState(booking.revision);
+
   // Adopt settings changed elsewhere unless the user has unsaved edits.
-  if (base.revision !== booking.revision && sameDraft(draft, base.draft)) {
-    setBase({ draft: saved, revision: booking.revision });
-    setDraft(saved);
+  if (booking.revision !== seenRevision) {
+    setSeenRevision(booking.revision);
+    if (sameDraft(draft, base.draft)) {
+      setBase({ draft: saved, revision: booking.revision });
+      setDraft(saved);
+    }
   }
 
   function update(patch: Partial<OnlineBookingDraft>) {
@@ -85,6 +93,7 @@ export function CrmOnlineBookingForm({
   function reloadLatest() {
     write.reset();
     setFieldError(null);
+    setSeenRevision(booking.revision);
     setBase({ draft: saved, revision: booking.revision });
     setDraft(saved);
   }

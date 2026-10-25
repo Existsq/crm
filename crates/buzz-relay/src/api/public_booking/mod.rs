@@ -127,7 +127,8 @@ fn rate_limited(limiter: &RateLimiter, key: RateKey) -> bool {
 }
 
 /// The client address: the socket peer, or the last `X-Forwarded-For` hop
-/// when the relay is configured to sit behind one trusted proxy.
+/// when the relay is configured to sit behind one trusted proxy; IPv6
+/// addresses are grouped by /64.
 fn client_ip(trust_forwarded_for: bool, headers: &HeaderMap, peer: Option<SocketAddr>) -> IpAddr {
     let forwarded = trust_forwarded_for
         .then(|| {
@@ -140,9 +141,19 @@ fn client_ip(trust_forwarded_for: bool, headers: &HeaderMap, peer: Option<Socket
                 .next_back()
         })
         .flatten();
-    forwarded
+    let ip = forwarded
         .or_else(|| peer.map(|addr| addr.ip()))
-        .unwrap_or(IpAddr::from([0, 0, 0, 0]))
+        .unwrap_or(IpAddr::from([0, 0, 0, 0]));
+    match ip {
+        // One IPv6 client usually holds a whole /64: limit the prefix.
+        IpAddr::V6(v6) if v6.to_ipv4_mapped().is_none() => {
+            let mut segments = v6.segments();
+            segments[4..].fill(0);
+            IpAddr::from(segments)
+        }
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(ip, IpAddr::V4),
+        IpAddr::V4(_) => ip,
+    }
 }
 
 /// A public error: a stable `error` code for the page plus a message.
@@ -214,7 +225,7 @@ async fn open_page(
         .map_err(|e| internal_error(&format!("booking settings read: {e}")).into_response())?
         .filter(|record| record.enabled)
         .ok_or_else(unavailable)?;
-    let settings = OnlineBookingSettings::parse(&record.settings.to_string())
+    let settings = serde_json::from_value::<OnlineBookingSettings>(record.settings)
         .map_err(|e| internal_error(&format!("booking settings: {e}")).into_response())?;
     Ok(Page {
         tenant,
@@ -291,15 +302,17 @@ pub async fn info(
         Ok(page) => page,
         Err(response) => return response,
     };
-    let (services, staff) = match state
-        .db
-        .crm_public_catalog(page.community(), page.space.channel_id)
-        .await
-    {
+    let (catalog, now) = tokio::join!(
+        state
+            .db
+            .crm_public_catalog(page.community(), page.space.channel_id),
+        local_now(&state, &page),
+    );
+    let (services, staff) = match catalog {
         Ok(catalog) => catalog,
         Err(e) => return internal_error(&format!("booking catalog read: {e}")).into_response(),
     };
-    let today = match local_now(&state, &page).await {
+    let today = match now {
         Ok(now) => now.date(),
         Err(response) => return response,
     };
@@ -525,14 +538,9 @@ pub async fn send_code(
     )
     .await
     {
+        // The row stays: a timed-out send may still arrive, and it must
+        // count against the phone and community limits either way.
         tracing::warn!(%error, "booking SMS failed");
-        if let Err(e) = state
-            .db
-            .crm_discard_booking_code(page.community(), verification_id)
-            .await
-        {
-            tracing::warn!(error = %e, "booking code discard failed");
-        }
         return public_error(
             StatusCode::BAD_GATEWAY,
             "sms_failed",

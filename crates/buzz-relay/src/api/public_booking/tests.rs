@@ -204,6 +204,16 @@ fn addresses_come_from_the_peer_unless_one_proxy_is_trusted() {
         "203.0.113.9".parse::<IpAddr>().unwrap()
     );
     assert_eq!(client_ip(true, &HeaderMap::new(), Some(peer)), peer.ip());
+    let v6: SocketAddr = "[2001:db8:1:2:aaaa:bbbb:cccc:dddd]:4000".parse().unwrap();
+    assert_eq!(
+        client_ip(false, &HeaderMap::new(), Some(v6)),
+        "2001:db8:1:2::".parse::<IpAddr>().unwrap()
+    );
+    let mapped: SocketAddr = "[::ffff:192.0.2.7]:4000".parse().unwrap();
+    assert_eq!(
+        client_ip(false, &HeaderMap::new(), Some(mapped)),
+        "192.0.2.7".parse::<IpAddr>().unwrap()
+    );
 }
 
 #[test]

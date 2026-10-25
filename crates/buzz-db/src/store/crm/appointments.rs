@@ -483,14 +483,7 @@ pub async fn slot_inputs(
     service_ids: &[Uuid],
     staff_id: Option<Uuid>,
 ) -> Result<Option<SlotInputs>> {
-    let now_local: Option<NaiveDateTime> = sqlx::query_scalar(
-        "SELECT (now() AT TIME ZONE (settings->>'timezone'))::timestamp FROM crm_spaces \
-         WHERE community_id = $1 AND channel_id = $2",
-    )
-    .bind(community.as_uuid())
-    .bind(space_channel_id)
-    .fetch_optional(pool)
-    .await?;
+    let now_local = super::booking::space_now_local(pool, community, space_channel_id).await?;
     let Some(now_local) = now_local else {
         return Ok(None);
     };

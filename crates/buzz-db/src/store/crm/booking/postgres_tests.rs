@@ -174,27 +174,6 @@ async fn codes_respect_resend_phone_and_community_limits() {
         issue(&fx, Uuid::new_v4(), "79000000003").await,
         CodeIssueOutcome::CommunityLimit
     );
-    // A failed SMS is forgotten and frees its slot.
-    let failed = Uuid::new_v4();
-    sqlx::query(
-        "DELETE FROM crm_booking_codes WHERE community_id = $1 AND phone_key = '79000000002'",
-    )
-    .bind(fx.community.as_uuid())
-    .execute(&fx.db.pool)
-    .await
-    .unwrap();
-    assert_eq!(
-        issue(&fx, failed, "79000000004").await,
-        CodeIssueOutcome::Issued
-    );
-    fx.db
-        .crm_discard_booking_code(fx.community, failed)
-        .await
-        .unwrap();
-    assert_eq!(
-        issue(&fx, Uuid::new_v4(), "79000000005").await,
-        CodeIssueOutcome::Issued
-    );
 }
 
 #[tokio::test]

@@ -80,6 +80,15 @@ export function CrmIdChecklist({
           })}
         </div>
       )}
+      {items !== null && items.length > 0 ? (
+        <p className="text-xs font-medium" role="status">
+          {selected.length === 0
+            ? ru.onlineBooking.allSelected
+            : ru.onlineBooking.someSelected(
+                items.filter((item) => selected.includes(item.id)).length,
+              )}
+        </p>
+      ) : null}
     </fieldset>
   );
 }

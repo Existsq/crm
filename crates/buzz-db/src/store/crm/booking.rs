@@ -359,24 +359,6 @@ pub async fn issue_code(
     Ok(CodeIssueOutcome::Issued)
 }
 
-/// Forget a stored code whose SMS could not be sent, so it does not count
-/// against the client's limits.
-pub async fn discard_code(
-    pool: &PgPool,
-    community: CommunityId,
-    verification_id: Uuid,
-) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM crm_booking_codes \
-         WHERE community_id = $1 AND verification_id = $2 AND verified_at IS NULL",
-    )
-    .bind(community.as_uuid())
-    .bind(verification_id)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
 /// Check a code and commit the attempt: a wrong code costs one of
 /// `max_attempts`, a right one marks the phone verified (until the code
 /// expires or books).
@@ -539,16 +521,6 @@ impl Db {
         limits: CodeLimits,
     ) -> Result<CodeIssueOutcome> {
         issue_code(&self.pool, community, issue, limits).await
-    }
-
-    /// Forget a code whose SMS failed.
-    #[datastore_span(name = "crm_discard_booking_code", system = "postgresql")]
-    pub async fn crm_discard_booking_code(
-        &self,
-        community: CommunityId,
-        verification_id: Uuid,
-    ) -> Result<()> {
-        discard_code(&self.pool, community, verification_id).await
     }
 
     /// The one live customer card with this phone.
