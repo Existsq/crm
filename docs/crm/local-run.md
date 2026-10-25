@@ -44,6 +44,16 @@ just setup
 (включая CRM-таблицы `crm_*`), регистрирует локальное сообщество и ставит
 зависимости десктопа. Первый запуск долгий: Rust собирает зависимости.
 
+**Если Docker пишет `401 UNAUTHORIZED` для `quay.io/minio/...`.** Образы MinIO на
+quay.io больше не раздаются. Поднимите сервисы с образом MinIO, который
+использует CI, и повторите `just setup` (он увидит, что Postgres и Redis уже
+работают). Keycloak для CRM не нужен.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d postgres redis minio minio-init
+just setup
+```
+
 ## 3. Запустить relay и приложение
 
 ```bash
@@ -119,6 +129,7 @@ export BUZZ_PRIVATE_KEY=<nsec или hex ключа>   # ключ участни
 | «Community connection failed» | relay не запущен или порт 3000 занят: `just ps`, затем перезапустите `just dev` |
 | В CRM написано «Попросите администратора сообщества создать CRM-пространство» | не выполнен шаг 4 или скопирован чужой `npub`; после команды откройте CRM заново |
 | Ошибки миграций после смены ветки | `just migrate`; если не помогло, `just reset` (удалит локальные данные) |
+| `401 UNAUTHORIZED` при скачивании `quay.io/minio/...` | см. обход в разделе 2 (образ MinIO с ghcr.io) |
 | Нужно остановить контейнеры | `just down` (данные сохраняются) |
 
 Автоматические проверки те же, что гоняет агент:
