@@ -341,18 +341,25 @@ pub async fn write_moves(
 }
 
 /// The forward (non-reversal) moves of a document or sale, in posting order.
+/// `sources` keeps a stock document and a sale that share an id apart.
 pub async fn moves_of_doc(
     tx: &mut Transaction<'_, Postgres>,
     community: CommunityId,
+    space_channel_id: Uuid,
     doc_id: Uuid,
+    sources: &[&str],
 ) -> Result<Vec<StockMoveOfDoc>> {
     let rows = sqlx::query(
         "SELECT warehouse_id, product_id, source, qty_delta_milli, value_delta_minor \
          FROM crm_stock_moves \
-         WHERE community_id = $1 AND doc_id = $2 AND NOT reversal ORDER BY move_id",
+         WHERE community_id = $1 AND space_channel_id = $2 AND doc_id = $3 \
+           AND source = ANY($4) AND NOT reversal \
+         ORDER BY move_id",
     )
     .bind(community.as_uuid())
+    .bind(space_channel_id)
     .bind(doc_id)
+    .bind(sources)
     .fetch_all(&mut **tx)
     .await?;
     rows.into_iter()
@@ -451,11 +458,13 @@ pub async fn insert_stock_doc(
 }
 
 /// Mark a stock document of the space voided, once.
+#[allow(clippy::too_many_arguments)]
 pub async fn void_stock_doc(
     tx: &mut Transaction<'_, Postgres>,
     community: CommunityId,
     space_channel_id: Uuid,
     doc_id: Uuid,
+    voided_at: DateTime<Utc>,
     void_event_id: &[u8],
     reason: &str,
     actor: &[u8],
@@ -475,7 +484,7 @@ pub async fn void_stock_doc(
         Some(false) => {}
     }
     sqlx::query(
-        "UPDATE crm_stock_docs SET voided_at = now(), void_event_id = $3, void_reason = $4, \
+        "UPDATE crm_stock_docs SET voided_at = $6, void_event_id = $3, void_reason = $4, \
                 voided_by = $5 \
          WHERE community_id = $1 AND doc_id = $2",
     )
@@ -484,12 +493,14 @@ pub async fn void_stock_doc(
     .bind(void_event_id)
     .bind(reason)
     .bind(actor)
+    .bind(voided_at)
     .execute(&mut **tx)
     .await?;
     Ok(StockDocVoidOutcome::Voided)
 }
 
-/// The consumables of the given services.
+/// The consumables of the given services; products no longer stocked goods
+/// are skipped.
 pub async fn consumables_for_services(
     tx: &mut Transaction<'_, Postgres>,
     community: CommunityId,
@@ -499,8 +510,11 @@ pub async fn consumables_for_services(
         return Ok(Vec::new());
     }
     let rows = sqlx::query(
-        "SELECT service_id, product_id, qty_milli FROM crm_tech_card_items \
-         WHERE community_id = $1 AND service_id = ANY($2) ORDER BY service_id, position",
+        "SELECT i.service_id, i.product_id, i.qty_milli FROM crm_tech_card_items i \
+         JOIN crm_products p ON p.community_id = i.community_id AND p.product_id = i.product_id \
+         WHERE i.community_id = $1 AND i.service_id = ANY($2) \
+           AND p.payment_object IN ('commodity', 'excise') \
+         ORDER BY i.service_id, i.position",
     )
     .bind(community.as_uuid())
     .bind(service_ids)
@@ -638,6 +652,23 @@ pub struct StockQuery {
     pub low_only: bool,
 }
 
+/// Stock levels with totals over every matching product, not only the
+/// returned ones.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct StockList {
+    /// Matching products by name, at most [`MAX_STOCK_LIST`].
+    pub items: Vec<CrmStockRecord>,
+    /// Products that matched; more than `items.len()` when cut.
+    pub matched: i64,
+    /// Cost value of every matching product's stock.
+    pub value_minor: i64,
+    /// Matching products at or below a configured minimum.
+    pub low_count: i64,
+}
+
+/// Products returned by one [`list_stock`] call.
+pub const MAX_STOCK_LIST: i64 = MAX_STOCK_PAGE * 4;
+
 /// Stock of the space's goods: every live stocked product, plus archived or
 /// unstocked ones that still have stock, by name.
 pub async fn list_stock(
@@ -645,7 +676,7 @@ pub async fn list_stock(
     community: CommunityId,
     space_channel_id: Uuid,
     query: &StockQuery,
-) -> Result<Vec<CrmStockRecord>> {
+) -> Result<StockList> {
     let pattern = query.search.as_deref().map(|s| {
         format!(
             "%{}%",
@@ -657,7 +688,11 @@ pub async fn list_stock(
     let rows = sqlx::query(
         "SELECT p.product_id, p.name, p.sku, p.unit, p.category, p.price_minor, \
                 p.min_stock_milli, p.archived_at IS NOT NULL AS archived, \
-                COALESCE(s.qty, 0)::bigint AS qty_milli, COALESCE(s.value, 0)::bigint AS value_minor \
+                COALESCE(s.qty, 0)::bigint AS qty_milli, COALESCE(s.value, 0)::bigint AS value_minor, \
+                count(*) OVER () AS matched, \
+                (sum(COALESCE(s.value, 0)) OVER ())::bigint AS total_value, \
+                count(*) FILTER (WHERE p.min_stock_milli > 0 \
+                                   AND COALESCE(s.qty, 0) <= p.min_stock_milli) OVER () AS low_count \
          FROM crm_products p \
          LEFT JOIN (SELECT product_id, sum(qty_milli) AS qty, sum(value_minor) AS value \
                     FROM crm_stock \
@@ -668,7 +703,7 @@ pub async fn list_stock(
            AND ((p.archived_at IS NULL AND p.payment_object IN ('commodity', 'excise')) \
                 OR COALESCE(s.qty, 0) <> 0) \
            AND ($4::text IS NULL OR p.name ILIKE $4 OR p.sku ILIKE $4) \
-           AND (NOT $5 OR COALESCE(s.qty, 0) <= p.min_stock_milli) \
+           AND (NOT $5 OR (p.min_stock_milli > 0 AND COALESCE(s.qty, 0) <= p.min_stock_milli)) \
          ORDER BY lower(p.name), p.product_id LIMIT $6",
     )
     .bind(community.as_uuid())
@@ -676,10 +711,17 @@ pub async fn list_stock(
     .bind(query.warehouse_id)
     .bind(pattern)
     .bind(query.low_only)
-    .bind(MAX_STOCK_PAGE * 4)
+    .bind(MAX_STOCK_LIST)
     .fetch_all(pool)
     .await?;
-    rows.into_iter()
+    let mut list = StockList::default();
+    if let Some(first) = rows.first() {
+        list.matched = first.try_get("matched")?;
+        list.value_minor = first.try_get("total_value")?;
+        list.low_count = first.try_get("low_count")?;
+    }
+    list.items = rows
+        .into_iter()
         .map(|row| {
             Ok(CrmStockRecord {
                 product_id: row.try_get("product_id")?,
@@ -694,7 +736,8 @@ pub async fn list_stock(
                 archived: row.try_get("archived")?,
             })
         })
-        .collect()
+        .collect::<Result<_>>()?;
+    Ok(list)
 }
 
 /// A movement as served by `GET /crm/stock/moves`.
@@ -1126,7 +1169,7 @@ impl Db {
         community: CommunityId,
         space_channel_id: Uuid,
         query: &StockQuery,
-    ) -> Result<Vec<CrmStockRecord>> {
+    ) -> Result<StockList> {
         list_stock(&self.pool, community, space_channel_id, query).await
     }
 

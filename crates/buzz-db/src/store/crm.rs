@@ -52,8 +52,8 @@ pub use staff::{
 };
 pub use stock::{
     CrmStockDocRecord, CrmStockMoveRecord, CrmStockRecord, CrmTechCardRecord, StockDocPage,
-    StockDocQuery, StockDocVoidOutcome, StockMovePage, StockMoveQuery, StockQuery,
-    TechCardWriteOutcome, MAX_STOCK_PAGE,
+    StockDocQuery, StockDocVoidOutcome, StockList, StockMovePage, StockMoveQuery, StockQuery,
+    TechCardWriteOutcome, MAX_STOCK_LIST, MAX_STOCK_PAGE,
 };
 
 /// Channel facts needed to decide whether a channel can host a CRM space.

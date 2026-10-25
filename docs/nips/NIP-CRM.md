@@ -294,9 +294,12 @@ current time in the space timezone.
 "walk_ins"}}`. Visits count when they hold time; revenue counts done visits
 at their booked prices; `worked_min` sums the scheduled intervals.
 `GET /crm/stock?warehouse=<uuid>&q=&low=true` returns `{"warehouse_id",
-"items": [{"product_id", "name", "sku", "unit", "category", "price_minor",
-"min_stock_milli", "qty_milli", "value_minor", "archived"}], "totals":
-{"value_minor", "low_count"}}` (all warehouses summed without `warehouse`).
+"truncated", "items": [{"product_id", "name", "sku", "unit", "category",
+"price_minor", "min_stock_milli", "qty_milli", "value_minor", "archived"}],
+"totals": {"value_minor", "low_count"}}` (all warehouses summed without
+`warehouse`). At most 2000 items are returned by name; `truncated` says more
+matched, and `totals` always cover every match. `low` keeps products with a
+minimum set (`min_stock_milli > 0`) and stock at or below it.
 `GET /crm/stock/moves?warehouse=&product=&before=&limit=` returns the movement
 journal newest first (`source` is `receipt`, `write_off`, `inventory`,
 `transfer`, `sale` or `consumable`; `reversal` marks void moves), with `next`.

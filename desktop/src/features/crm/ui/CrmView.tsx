@@ -16,6 +16,7 @@ import { CrmProductsSection } from "@/features/crm/ui/products/CrmProductsSectio
 import { CrmSalesSection } from "@/features/crm/ui/sales/CrmSalesSection";
 import { CrmScheduleSection } from "@/features/crm/ui/staff/CrmScheduleSection";
 import { CrmStaffSection } from "@/features/crm/ui/staff/CrmStaffSection";
+import { CrmStockSection } from "@/features/crm/ui/stock/CrmStockSection";
 import { CrmSpaceGate } from "@/features/crm/ui/CrmSpaceGate";
 import type { CrmMemberSpace } from "@/shared/api/tauriCrm";
 import { cn } from "@/shared/lib/cn";
@@ -46,6 +47,8 @@ function CrmSectionContent({
       );
     case "services":
       return <CrmProductsSection kind="services" space={space} />;
+    case "stock":
+      return <CrmStockSection space={space} />;
     case "staff":
       return <CrmStaffSection space={space} />;
     case "schedule":
