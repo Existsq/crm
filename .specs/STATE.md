@@ -44,11 +44,9 @@
 
 ## Handoff
 
-- **Feature**: `crm-foundation` (branch `crm/foundation`)
-- **Phase / Task**: Execute done; verification round 3 pending (rounds 1–2 FAIL, every listed gap now fixed in 8e8ee89)
-- **Completed**: buzz-crm domain crate, kinds 42100/42101, migration 0050, relay CRM ingest + guards, GET /crm/space (+ `?archived=true`), SDK builders, CLI `buzz crm space|warehouses`, Postgres/relay/e2e/CLI tests, NIP-CRM, local run guide `docs/crm/local-run.md`
-- **In-progress** (file:line): none on this branch. Stacked branches: `crm/desktop-shell` (desktop CRM shell), `crm/catalog` (products, backend committed 69adf18, desktop pending commit), `crm/atol-core` (subagent building buzz-atol + emulator from this branch)
-- **Next step**: run the round-3 verifier; rebase `crm/desktop-shell` and `crm/catalog` onto this branch; push all three and open draft PRs
-- **Blockers**: none. Environment: Docker daemon stops when the container sleeps — restart with `scratchpad/env/dev-env.sh`; worktrees share `/home/user/crm/target` (see L-008)
-- **Uncommitted files**: none after the docs commit
-- **Branch**: crm/foundation
+- **Feature**: customers, sales and analytics (branch `claude/project-thread-yqqm67`, stacked on `crm/catalog`)
+- **Completed**: kinds 42103 (party), 42104 (sale, posted once, numbered per space), 42105 (sale void); migrations 0052/0053 + `schema.sql`; relay ingest and `GET /crm/parties`, `/crm/sales`, `/crm/analytics` (space-timezone days, voided sales excluded); SDK builders; CLI `buzz crm parties|sales|analytics`; desktop sections Клиенты / Продажи / Аналитика; Postgres tests, relay e2e `e2e_crm_sales.rs`, desktop unit tests, Playwright `crm-sales.spec.ts`
+- **Not done**: no spec/design docs under `.specs/features/` for this feature yet; NIP-CRM.md does not describe 42102–42105; sales do not move stock (ledger feature next); no draft PR opened
+- **Next step**: write `.specs/features/crm-sales/spec.md` and the NIP section, open a draft PR targeting `crm/catalog`, then the stock ledger (receipts, write-offs, stock checks on sale)
+- **Blockers**: none
+- **Branch**: claude/project-thread-yqqm67
