@@ -30,7 +30,14 @@ import { SectionHeader } from "@/shared/ui/PageHeader";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 /** The day journal: visits of every staff member, booked from the grid. */
-export function CrmJournalSection({ space }: { space: CrmMemberSpace }) {
+export function CrmJournalSection({
+  onPayVisit,
+  space,
+}: {
+  /** Opens the cash desk with the visit's services in the cart. */
+  onPayVisit: (appointmentId: string) => void;
+  space: CrmMemberSpace;
+}) {
   const j = ru.journal;
   const canBook = space.capabilities.has("post_documents");
   const today = toIsoDate(new Date());
@@ -223,6 +230,7 @@ export function CrmJournalSection({ space }: { space: CrmMemberSpace }) {
             returnFocusRef.current?.focus();
           }}
           onOpenChange={setDialogOpen}
+          onPay={canBook ? onPayVisit : null}
           open={dialogOpen}
           services={servicesQuery.data ?? null}
           space={space}

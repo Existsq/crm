@@ -2,6 +2,7 @@ import * as React from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import {
+  type CrmSectionId,
   DEFAULT_CRM_SECTION,
   parseCrmSection,
 } from "@/features/crm/lib/crmSections";
@@ -24,16 +25,30 @@ export const Route = createFileRoute("/crm/$section")({
     }
   },
   component: CrmRouteComponent,
+  // `visit`: the booked visit the cash desk opens to take payment for.
+  validateSearch: (search: Record<string, unknown>): { visit?: string } =>
+    typeof search.visit === "string" ? { visit: search.visit } : {},
 });
 
 function CrmRouteComponent() {
   usePreviewFeatureWarning("crm");
   const { section } = Route.useParams();
+  const { visit } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const current = parseCrmSection(section) ?? DEFAULT_CRM_SECTION;
+  const openSection = React.useCallback(
+    (next: CrmSectionId, nextVisit?: string) =>
+      void navigate({
+        to: "/crm/$section",
+        params: { section: next },
+        search: nextVisit ? { visit: nextVisit } : {},
+      }),
+    [navigate],
+  );
 
   return (
     <React.Suspense fallback={<ViewLoadingFallback kind="crm" />}>
-      <CrmScreen section={current} />
+      <CrmScreen onOpenSection={openSection} section={current} visit={visit} />
     </React.Suspense>
   );
 }

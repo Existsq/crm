@@ -116,6 +116,9 @@ pub struct SalePayload {
     /// Optional note.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Booked visit this sale pays for (kind 42133); the relay marks it done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub appointment_id: Option<Uuid>,
 }
 
 impl SalePayload {
@@ -281,7 +284,7 @@ impl SaleVoidPayload {
     }
 }
 
-fn bounded(value: &str, field: &'static str, max: usize) -> Result<String> {
+pub(crate) fn bounded(value: &str, field: &'static str, max: usize) -> Result<String> {
     if value.chars().count() > max || value.chars().any(|c| c.is_control() && c != '\n') {
         return Err(CrmError::field(
             field,

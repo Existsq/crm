@@ -60,6 +60,9 @@ pub struct CrmSaleInput {
     pub cash_tendered_minor: Option<Money>,
     pub lines: Vec<SaleLine>,
     pub note: Option<String>,
+    /// Booked visit this sale pays for.
+    #[serde(default)]
+    pub appointment_id: Option<String>,
 }
 
 fn non_blank(value: Option<&str>) -> Option<&str> {
@@ -276,6 +279,9 @@ fn sale_builder(input: CrmSaleInput) -> Result<(nostr::EventBuilder, uuid::Uuid)
         cash_tendered_minor: input.cash_tendered_minor,
         lines: input.lines,
         note: input.note,
+        appointment_id: non_blank(input.appointment_id.as_deref())
+            .map(|id| parse_uuid(id, "appointment id"))
+            .transpose()?,
     };
     let builder = buzz_sdk_pkg::build_crm_sale(channel, sale_id, payload).map_err(sdk_error)?;
     Ok((builder, sale_id))

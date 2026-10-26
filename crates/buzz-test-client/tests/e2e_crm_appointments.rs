@@ -296,6 +296,25 @@ async fn appointments_respect_hours_overlaps_and_slots() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["status"], json!("cancelled"));
 
+    // Visit analytics: one visit holding time, one cancelled.
+    let (status, body) = get(
+        Some(&guest),
+        &format!("/crm/analytics/services?from={day}&to={day}"),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let olga_stats = body["staff"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["staff_id"] == json!(olga))
+        .cloned()
+        .expect("olga in staff analytics");
+    assert_eq!(olga_stats["visits"], json!(1), "{body}");
+    assert_eq!(olga_stats["cancelled"], json!(1), "{body}");
+    assert_eq!(olga_stats["worked_min"], json!(600), "{body}");
+    assert_eq!(body["services"][0]["product_id"], json!(haircut), "{body}");
+
     // Reads are bounded and members-only.
     let (status, _) = get(Some(&guest), "/crm/appointments").await;
     assert_eq!(status, 400);
@@ -311,6 +330,142 @@ async fn appointments_respect_hours_overlaps_and_slots() {
     )
     .await;
     assert!(status == 403 || status == 404, "{status}");
+
+    cleanup_space(&pool, community).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a running relay"]
+async fn a_sale_pays_for_a_visit_and_its_void_unpays_it() {
+    let pool = pool().await;
+    let (owner, channel, community) = fresh_space(&pool).await;
+    let warehouse: Uuid = get_space(&owner).await["warehouses"][0]["id"]
+        .as_str()
+        .and_then(|id| id.parse().ok())
+        .expect("default warehouse");
+    let day = booking_day();
+    let haircut = Uuid::new_v4();
+    create(
+        &owner,
+        KIND_CRM_PRODUCT,
+        channel,
+        haircut,
+        &service("Стрижка", 60, 150_000),
+    )
+    .await;
+    let olga = Uuid::new_v4();
+    create(
+        &owner,
+        KIND_CRM_STAFF,
+        channel,
+        olga,
+        &json!({"v": 1, "name": "Ольга", "service_ids": [haircut], "archived": false}),
+    )
+    .await;
+    let visit = Uuid::new_v4();
+    let booked = booking(olga, &day, "10:00", &[(haircut, 60, 150_000)], "arrived");
+    let mut late = booked.clone();
+    late["outside_hours"] = json!(true);
+    create(&owner, KIND_CRM_APPOINTMENT, channel, visit, &late).await;
+    let cancelled = Uuid::new_v4();
+    let mut gone = booking(olga, &day, "15:00", &[(haircut, 60, 150_000)], "cancelled");
+    gone["outside_hours"] = json!(true);
+    create(&owner, KIND_CRM_APPOINTMENT, channel, cancelled, &gone).await;
+
+    let sale = |appointment: Uuid| {
+        json!({
+            "v": 1,
+            "warehouse_id": warehouse,
+            "payment": "card",
+            "lines": [{"product_id": haircut, "qty_milli": 1000, "price_minor": 150_000}],
+            "appointment_id": appointment,
+        })
+    };
+    // Unknown and cancelled visits cannot be paid; nothing is sold.
+    for appointment in [Uuid::new_v4(), cancelled] {
+        reject(
+            &owner,
+            &crm_event(
+                &owner,
+                KIND_CRM_SALE,
+                channel,
+                Some(Uuid::new_v4()),
+                &sale(appointment),
+                None,
+            ),
+            "invalid: appointment_id",
+        )
+        .await;
+    }
+    let (_, body) = get(Some(&owner), "/crm/sales").await;
+    assert_eq!(body["sales"], json!([]), "{body}");
+
+    let paid = Uuid::new_v4();
+    let sale_event = crm_event(
+        &owner,
+        KIND_CRM_SALE,
+        channel,
+        Some(paid),
+        &sale(visit),
+        None,
+    );
+    accept(&owner, &sale_event).await;
+    let (_, body) = get(Some(&owner), &format!("/crm/appointments/{visit}")).await;
+    assert_eq!(body["status"], json!("done"), "{body}");
+    assert_eq!(body["sale_id"], json!(paid));
+    assert_eq!(body["revision"], json!(sale_event.id.to_hex()));
+
+    // One payment per visit, and a paid visit keeps its time.
+    reject(
+        &owner,
+        &crm_event(
+            &owner,
+            KIND_CRM_SALE,
+            channel,
+            Some(Uuid::new_v4()),
+            &sale(visit),
+            None,
+        ),
+        "conflict:",
+    )
+    .await;
+    let mut moved = late.clone();
+    moved["start"] = json!("11:00");
+    reject(
+        &owner,
+        &crm_event(
+            &owner,
+            KIND_CRM_APPOINTMENT,
+            channel,
+            Some(visit),
+            &moved,
+            Some(&sale_event.id.to_hex()),
+        ),
+        "invalid: the visit is paid",
+    )
+    .await;
+
+    // Voiding the sale unpays the visit.
+    let void = sign(
+        &owner,
+        KIND_CRM_SALE_VOID,
+        &json!({"v": 1, "reason": "ошибка"}).to_string(),
+        vec![
+            tag(&["h", &channel.to_string()]),
+            tag(&["crm-id", &paid.to_string()]),
+        ],
+    );
+    accept(&owner, &void).await;
+    let (_, body) = get(Some(&owner), &format!("/crm/appointments/{visit}")).await;
+    assert_eq!(body["status"], json!("arrived"), "{body}");
+    assert_eq!(body["sale_id"], Value::Null);
+    assert_eq!(body["revision"], json!(void.id.to_hex()));
+    let (_, body) = get(
+        Some(&owner),
+        &format!("/crm/appointments?customer_id={}", Uuid::new_v4()),
+    )
+    .await;
+    assert_eq!(body["appointments"], json!([]));
 
     cleanup_space(&pool, community).await;
 }

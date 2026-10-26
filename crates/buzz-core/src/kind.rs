@@ -350,6 +350,12 @@ pub const KIND_CRM_PARTY: u32 = 42103;
 pub const KIND_CRM_SALE: u32 = 42104;
 /// CRM sale reversal (сторно) of a posted sale.
 pub const KIND_CRM_SALE_VOID: u32 = 42105;
+/// CRM stock document: receipt, write-off, inventory or transfer (posted once).
+pub const KIND_CRM_STOCK_DOC: u32 = 42106;
+/// CRM stock document void (сторно): reverts the document's movements.
+pub const KIND_CRM_STOCK_DOC_VOID: u32 = 42107;
+/// CRM service tech card: consumables written off when the service is sold.
+pub const KIND_CRM_TECH_CARD: u32 = 42108;
 /// CRM fiscal receipt printed on a ККМ for a sale or its return.
 pub const KIND_CRM_FISCAL_RECEIPT: u32 = 42120;
 /// CRM cash-register shift opened or closed on a ККМ.
@@ -705,6 +711,9 @@ pub const ALL_KINDS: &[u32] = &[
     KIND_CRM_PARTY,
     KIND_CRM_SALE,
     KIND_CRM_SALE_VOID,
+    KIND_CRM_STOCK_DOC,
+    KIND_CRM_STOCK_DOC_VOID,
+    KIND_CRM_TECH_CARD,
     KIND_CRM_FISCAL_RECEIPT,
     KIND_CRM_CASH_SHIFT,
     KIND_CRM_STAFF,
@@ -965,6 +974,8 @@ const _: () = assert!(is_crm_kind(KIND_CRM_STAFF) && is_crm_kind(KIND_CRM_STAFF_
 const _: () = assert!(is_crm_kind(KIND_CRM_APPOINTMENT));
 const _: () =
     assert!(is_crm_kind(KIND_CRM_ONLINE_BOOKING) && is_crm_kind(KIND_CRM_ONLINE_BOOKING_SETTINGS));
+const _: () = assert!(is_crm_kind(KIND_CRM_STOCK_DOC) && is_crm_kind(KIND_CRM_STOCK_DOC_VOID));
+const _: () = assert!(is_crm_kind(KIND_CRM_TECH_CARD));
 const _: () = assert!(!is_crm_kind(KIND_PRODUCT_FEEDBACK));
 
 // Moderation kinds fit u16 and are neither replaceable nor ephemeral:

@@ -50,7 +50,7 @@ function seed(role: "owner" | "guest"): CrmSeed {
   const space: Space = {
     channelId: SPACE_CHANNEL,
     role,
-    settings: { default_vat: "none" },
+    settings: { default_vat: "none", fiscalization: "optional" },
     warehouses: [{ id: WAREHOUSE, name: "Салон на Ленина" }],
     products: [
       service(HAIRCUT, "Мужская стрижка", 150_000, 45),
@@ -267,4 +267,100 @@ test("days move with the arrows and guests only read", async ({ page }) => {
   await expect(
     page.getByTestId(`crm-journal-appointment-${VISIT}`),
   ).toBeVisible();
+});
+
+test("a visit is paid at the cash desk and shows in the client's history", async ({
+  page,
+}) => {
+  await openJournal(page, seed("owner"));
+  await page.getByTestId(`crm-journal-appointment-${VISIT}`).click();
+  const dialog = page.getByTestId("crm-appointment-dialog");
+  await dialog.getByTestId("crm-appointment-pay").click();
+  await expect(page).toHaveURL(/#\/crm\/cash\?visit=/);
+  const banner = page.getByTestId("crm-cash-visit");
+  await expect(banner).toContainText("Оплата визита");
+  await expect(banner).toContainText("Мария Соколова");
+  await expect(page.getByTestId("crm-cash-cart")).toContainText(
+    "Мужская стрижка",
+  );
+  await expect(page.getByTestId("crm-cash-pay")).toContainText("1 500,00");
+  await waitForAnimations(page);
+  await page
+    .getByTestId("crm-cash")
+    .screenshot({ path: `${OUT}/03-visit-checkout.png` });
+  await page.getByTestId("crm-cash-pay").click();
+  await expect(page).toHaveURL(/#\/crm\/cash$/);
+  await expect(banner).toHaveCount(0);
+
+  await page.getByTestId("crm-section-journal").click();
+  const visit = page.getByTestId(`crm-journal-appointment-${VISIT}`);
+  await expect(visit).toHaveAttribute("data-status", "done");
+  await expect(visit).toContainText("оплачено");
+  await visit.click();
+  await expect(dialog.getByTestId("crm-appointment-pay")).toHaveCount(0);
+  await expect(dialog.getByTestId("crm-appointment-staff")).toBeDisabled();
+  await dialog.getByRole("button", { name: "Отмена" }).click();
+
+  await page.getByTestId("crm-section-parties").click();
+  await page.getByTestId(`crm-party-${MARIA}`).getByRole("button").click();
+  const visits = page.getByTestId("crm-party-visits");
+  await expect(page.getByTestId("crm-party-visit-count")).toHaveText("1");
+  await expect(visits).toContainText("Мужская стрижка");
+  await expect(visits).toContainText("Визит завершён");
+});
+
+test("staff analytics sum visits, load and services", async ({ page }) => {
+  const value = seed("owner");
+  const space = value.space as Space;
+  const day = today();
+  space.appointments = [
+    ...(space.appointments ?? []),
+    {
+      staff_id: OLGA,
+      date: day,
+      start: "10:00",
+      service_ids: [HAIRCUT, BEARD],
+      client_name: "Пётр",
+      status: "done",
+    },
+    {
+      staff_id: OLGA,
+      date: day,
+      start: "16:00",
+      service_ids: [COLOR],
+      client_name: "Олег",
+      status: "no_show",
+    },
+  ];
+  await page.goto("/");
+  await page.waitForFunction(() => Boolean(window.__BUZZ_E2E_SEED_CRM__));
+  await page.evaluate((data) => window.__BUZZ_E2E_SEED_CRM__?.(data), value);
+  await page.getByTestId("open-crm-view").click();
+  await page.getByTestId("crm-section-staff-analytics").click();
+  await expect(page).toHaveURL(/#\/crm\/staff-analytics$/);
+
+  await expect(page.getByTestId("crm-staff-analytics-visits")).toHaveText("2");
+  await expect(page.getByTestId("crm-staff-analytics-revenue")).toHaveText(
+    /2\s?400,00\s?₽/,
+  );
+  // 45 + 30 + 45 booked minutes of 540 worked: 22%.
+  await expect(page.getByTestId("crm-staff-analytics-utilisation")).toHaveText(
+    "22%",
+  );
+  await expect(page.getByTestId("crm-staff-analytics-new-clients")).toHaveText(
+    "1",
+  );
+  const olga = page.getByTestId(`crm-staff-analytics-${OLGA}`);
+  await expect(olga).toContainText("Ольга");
+  await expect(olga).toContainText("22%");
+  await expect(page.getByTestId(`crm-staff-analytics-${IVAN}`)).toContainText(
+    "нет графика",
+  );
+  await expect(page.getByTestId("crm-staff-analytics-services")).toContainText(
+    "Мужская стрижка",
+  );
+  await waitForAnimations(page);
+  await page
+    .getByTestId("crm-staff-analytics")
+    .screenshot({ path: `${OUT}/04-staff-analytics.png` });
 });

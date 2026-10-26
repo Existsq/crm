@@ -28,6 +28,8 @@ pub const SALE_PATH: &str = "/crm/sales/{sale_id}";
 pub const SHIFTS_PATH: &str = "/crm/shifts";
 /// Route path of the analytics read.
 pub const ANALYTICS_PATH: &str = "/crm/analytics";
+/// Visit analytics: staff, services and clients.
+pub const VISIT_ANALYTICS_PATH: &str = "/crm/analytics/services";
 
 const DEFAULT_SALE_LIMIT: i64 = 50;
 /// Days in the default analytics period, ending today.
@@ -216,6 +218,53 @@ pub async fn analytics(
             Json(body).into_response()
         }
         Err(e) => internal_error(&format!("CRM analytics read: {e}")).into_response(),
+    }
+}
+
+/// `GET /crm/analytics/services?from&to` — booked visits per staff member,
+/// the most booked services and client counts, for the same periods as
+/// `GET /crm/analytics`.
+pub async fn visit_analytics(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Response {
+    let member =
+        match authorize_space_member(&state, &headers, VISIT_ANALYTICS_PATH, raw_query.as_deref())
+            .await
+        {
+            Ok(member) => member,
+            Err(response) => return response,
+        };
+    let params: AnalyticsParams = match parse_query_or_400(raw_query.as_deref()) {
+        Ok(params) => params,
+        Err(response) => return response.into_response(),
+    };
+    let timezone = member.space.settings["timezone"]
+        .as_str()
+        .unwrap_or("UTC")
+        .to_owned();
+    let today = match state.db.crm_today_in(&timezone).await {
+        Ok(today) => today,
+        Err(e) => return internal_error(&format!("CRM analytics clock: {e}")).into_response(),
+    };
+    let (from, to) = match period_bounds(&params, today) {
+        Ok(bounds) => bounds,
+        Err(message) => return api_error(StatusCode::BAD_REQUEST, message).into_response(),
+    };
+    let period = AnalyticsPeriod { from, to, timezone };
+    match state
+        .db
+        .crm_visit_analytics(member.community(), member.space.channel_id, &period)
+        .await
+    {
+        Ok(analytics) => {
+            let mut body = json!(analytics);
+            body["from"] = json!(from);
+            body["to"] = json!(to);
+            Json(body).into_response()
+        }
+        Err(e) => internal_error(&format!("CRM visit analytics read: {e}")).into_response(),
     }
 }
 

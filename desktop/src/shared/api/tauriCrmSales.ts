@@ -145,6 +145,8 @@ export type CrmSaleInput = {
   cashTenderedMinor?: number | null;
   lines: CrmSaleLineInput[];
   note: string | null;
+  /** Booked visit this sale pays for. */
+  appointmentId?: string | null;
 };
 
 export type CrmSaleLine = {
@@ -331,6 +333,7 @@ export function toRawCrmSale(input: CrmSaleInput) {
       discount_minor: line.discountMinor,
     })),
     note: input.note,
+    appointment_id: input.appointmentId ?? null,
   };
 }
 

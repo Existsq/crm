@@ -6,6 +6,7 @@ import { ru } from "@/features/crm/i18n/ru";
  */
 export const CRM_SECTIONS = [
   { id: "products", label: ru.sections.products },
+  { id: "stock", label: ru.sections.stock },
   { id: "journal", label: ru.sections.journal },
   { id: "services", label: ru.sections.services },
   { id: "staff", label: ru.sections.staff },
@@ -15,6 +16,7 @@ export const CRM_SECTIONS = [
   { id: "cash", label: ru.sections.cash },
   { id: "sales", label: ru.sections.sales },
   { id: "analytics", label: ru.sections.analytics },
+  { id: "staff-analytics", label: ru.sections.staffAnalytics },
   { id: "settings", label: ru.sections.settings },
 ] as const;
 

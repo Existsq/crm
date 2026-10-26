@@ -223,6 +223,7 @@ async fn sales_post_once_validate_references_void_and_feed_analytics() {
     add_member(&owner, channel, &member, "member").await;
     let kefir = product(&owner, channel, "Кефир", "piece").await;
     let cheese = product(&owner, channel, "Сыр", "kilogram").await;
+    stock_up(&owner, channel, warehouse, &[kefir, cheese]).await;
     let maria = Uuid::new_v4();
     accept(
         &owner,
@@ -405,6 +406,7 @@ async fn split_payments_receipts_and_shifts_are_recorded() {
     add_member(&owner, channel, &cashier, "member").await;
     add_member(&owner, channel, &bot, "bot").await;
     let kefir = product(&owner, channel, "Кефир", "piece").await;
+    stock_up(&owner, channel, warehouse, &[kefir]).await;
 
     let mut payload = sale(
         warehouse,

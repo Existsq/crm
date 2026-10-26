@@ -20,6 +20,7 @@ import {
   formatCrmDateTime,
 } from "@/features/crm/ui/CrmField";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
+import { CrmPartyVisits } from "@/features/crm/ui/parties/CrmPartyVisits";
 import type { CrmParty, CrmPartyFields } from "@/shared/api/tauriCrmSales";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -213,6 +214,9 @@ export function CrmPartyDialog({
           </DialogHeader>
           <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-1">
             {party ? <PartyPurchases party={party} /> : null}
+            {party && party.partyType !== "supplier" ? (
+              <CrmPartyVisits customerId={party.id} />
+            ) : null}
             <fieldset className="grid gap-4 sm:grid-cols-2" disabled={!canEdit}>
               <CrmField id={fieldId("type")} label={fields.type}>
                 <NativeSelect

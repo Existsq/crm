@@ -8,7 +8,12 @@ const CrmView = React.lazy(async () => {
   return { default: module.CrmView };
 });
 
-export function CrmScreen(props: { section: CrmSectionId }) {
+export function CrmScreen(props: {
+  section: CrmSectionId;
+  /** Booked visit the cash desk takes payment for. */
+  visit?: string;
+  onOpenSection: (section: CrmSectionId, visit?: string) => void;
+}) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <React.Suspense fallback={<ViewLoadingFallback kind="crm" />}>
