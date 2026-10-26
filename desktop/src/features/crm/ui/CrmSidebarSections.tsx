@@ -12,6 +12,7 @@ import {
   TrendingUp,
   ShoppingCart,
   Users,
+  Wallet,
   Warehouse,
 } from "lucide-react";
 
@@ -39,6 +40,7 @@ const SECTION_ICONS: Record<CrmSectionId, LucideIcon> = {
   sales: ReceiptText,
   analytics: BarChart3,
   "staff-analytics": TrendingUp,
+  payroll: Wallet,
   settings: Settings,
 };
 

@@ -34,6 +34,11 @@ import {
   unpayMockAppointment,
 } from "./e2eBridgeCrmAppointments.ts";
 import {
+  handleCrmPayrollMockCommand,
+  type MockCrmPayRatesSeed,
+  seedMockCrmPayroll,
+} from "./e2eBridgeCrmPayroll.ts";
+import {
   handleCrmSalesMockCommand,
   type MockCrmPartySeed,
   type MockCrmSaleSeed,
@@ -98,6 +103,8 @@ export type MockCrmSeed = {
     stock?: MockCrmStockSeed[];
     techCards?: MockCrmTechCardSeed[];
     appointments?: MockCrmAppointmentSeed[];
+    /** Staff pay rates (kind 42160). */
+    payRates?: MockCrmPayRatesSeed[];
   } | null;
 };
 
@@ -173,6 +180,7 @@ export function resetMockCrm(): void {
   seedMockCrmStaff();
   seedMockCrmStock();
   seedMockCrmAppointments();
+  seedMockCrmPayroll();
 }
 
 export function seedMockCrm(seed: MockCrmSeed): void {
@@ -190,6 +198,7 @@ export function seedMockCrm(seed: MockCrmSeed): void {
     seed.space?.warehouses?.[0]?.id ?? null,
   );
   seedMockCrmAppointments(seed.space?.appointments ?? []);
+  seedMockCrmPayroll(seed.space?.payRates ?? []);
   state = {
     canCreate: seed.canCreate ?? true,
     loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
@@ -447,6 +456,11 @@ export function handleCrmMockCommand(
         requireCapability,
       });
       if (journal) return journal;
+      const payroll = handleCrmPayrollMockCommand(command, payload, {
+        channelId: state.space?.role ? state.space.channelId : null,
+        requireCapability,
+      });
+      if (payroll) return payroll;
       const result = handleCrmProductMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

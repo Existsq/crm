@@ -460,3 +460,8 @@ export function handleCrmAppointmentMockCommand(
       return undefined;
   }
 }
+
+/** Every booked visit, for other CRM mocks (payroll). */
+export function mockCrmAppointments(): readonly RawCrmAppointment[] {
+  return appointments;
+}

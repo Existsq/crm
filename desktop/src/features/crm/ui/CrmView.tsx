@@ -11,6 +11,7 @@ import { CrmStaffAnalyticsSection } from "@/features/crm/ui/analytics/CrmStaffAn
 import { CrmCashSection } from "@/features/crm/ui/cash/CrmCashSection";
 import { CrmJournalSection } from "@/features/crm/ui/journal/CrmJournalSection";
 import { CrmSettingsSection } from "@/features/crm/ui/CrmSettingsSection";
+import { CrmPayrollSection } from "@/features/crm/ui/payroll/CrmPayrollSection";
 import { CrmPartiesSection } from "@/features/crm/ui/parties/CrmPartiesSection";
 import { CrmProductsSection } from "@/features/crm/ui/products/CrmProductsSection";
 import { CrmSalesSection } from "@/features/crm/ui/sales/CrmSalesSection";
@@ -69,6 +70,8 @@ function CrmSectionContent({
       return <CrmAnalyticsSection space={space} />;
     case "staff-analytics":
       return <CrmStaffAnalyticsSection space={space} />;
+    case "payroll":
+      return <CrmPayrollSection space={space} />;
     case "settings":
       return <CrmSettingsSection space={space} />;
   }

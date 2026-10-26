@@ -33,6 +33,7 @@ test("the default section is the first one: the catalog", () => {
       "sales",
       "analytics",
       "staff-analytics",
+      "payroll",
       "settings",
     ],
   );
