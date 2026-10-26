@@ -39,6 +39,15 @@ import {
   seedMockCrmPayroll,
 } from "./e2eBridgeCrmPayroll.ts";
 import {
+  checkMockSaleBonus,
+  handleCrmLoyaltyMockCommand,
+  type MockCrmBonusSeed,
+  type MockCrmLoyaltySeed,
+  recordMockSaleBonuses,
+  revertMockSaleBonuses,
+  seedMockCrmLoyalty,
+} from "./e2eBridgeCrmLoyalty.ts";
+import {
   handleCrmSalesMockCommand,
   type MockCrmPartySeed,
   type MockCrmSaleSeed,
@@ -105,6 +114,10 @@ export type MockCrmSeed = {
     appointments?: MockCrmAppointmentSeed[];
     /** Staff pay rates (kind 42160). */
     payRates?: MockCrmPayRatesSeed[];
+    /** Loyalty programme (kind 42170); omitted, it is off. */
+    loyalty?: MockCrmLoyaltySeed;
+    /** Opening bonus balances. */
+    bonuses?: MockCrmBonusSeed[];
   } | null;
 };
 
@@ -199,6 +212,7 @@ export function seedMockCrm(seed: MockCrmSeed): void {
   );
   seedMockCrmAppointments(seed.space?.appointments ?? []);
   seedMockCrmPayroll(seed.space?.payRates ?? []);
+  seedMockCrmLoyalty(seed.space?.loyalty, seed.space?.bonuses ?? []);
   state = {
     canCreate: seed.canCreate ?? true,
     loseNextWriteResponse: seed.loseNextWriteResponse ?? false,
@@ -401,12 +415,20 @@ export function handleCrmMockCommand(
         ),
       };
     default: {
-      const visitId =
+      const saleInput =
         command === "crm_post_sale"
-          ? (payload as { input: { appointment_id?: string | null } }).input
-              .appointment_id
+          ? (
+              payload as {
+                input: Parameters<typeof checkMockSaleBonus>[0] & {
+                  sale_id: string;
+                  appointment_id?: string | null;
+                };
+              }
+            ).input
           : null;
+      const visitId = saleInput?.appointment_id ?? null;
       if (visitId) checkMockAppointmentPayable(visitId);
+      if (saleInput) checkMockSaleBonus(saleInput);
       const channelId = state.space?.role ? state.space.channelId : null;
       const warehouses = state.space?.warehouses ?? [];
       const allowNegative = state.space?.settings.allow_negative_stock ?? false;
@@ -419,14 +441,14 @@ export function handleCrmMockCommand(
         voidSaleStock: voidMockSaleStock,
       });
       if (sales) {
-        if (visitId) {
-          payMockAppointment(
-            visitId,
-            (payload as { input: { sale_id: string } }).input.sale_id,
-          );
+        if (saleInput) {
+          if (visitId) payMockAppointment(visitId, saleInput.sale_id);
+          recordMockSaleBonuses(saleInput.sale_id, saleInput.bonus_minor);
         }
         if (command === "crm_void_sale") {
-          unpayMockAppointment((payload as { saleId: string }).saleId);
+          const saleId = (payload as { saleId: string }).saleId;
+          unpayMockAppointment(saleId);
+          revertMockSaleBonuses(saleId);
         }
         return sales;
       }
@@ -461,6 +483,11 @@ export function handleCrmMockCommand(
         requireCapability,
       });
       if (payroll) return payroll;
+      const loyalty = handleCrmLoyaltyMockCommand(command, payload, {
+        channelId: state.space?.role ? state.space.channelId : null,
+        requireCapability,
+      });
+      if (loyalty) return loyalty;
       const result = handleCrmProductMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

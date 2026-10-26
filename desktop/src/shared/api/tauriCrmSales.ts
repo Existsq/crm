@@ -147,6 +147,8 @@ export type CrmSaleInput = {
   note: string | null;
   /** Booked visit this sale pays for. */
   appointmentId?: string | null;
+  /** Loyalty bonuses spent; already part of the line discounts. */
+  bonusMinor?: number | null;
 };
 
 export type CrmSaleLine = {
@@ -334,6 +336,7 @@ export function toRawCrmSale(input: CrmSaleInput) {
     })),
     note: input.note,
     appointment_id: input.appointmentId ?? null,
+    bonus_minor: input.bonusMinor ?? null,
   };
 }
 

@@ -100,6 +100,7 @@ export default defineConfig({
         "**/crm-stock.spec.ts",
         "**/crm-journal.spec.ts",
         "**/crm-payroll.spec.ts",
+        "**/crm-loyalty.spec.ts",
         "**/workflow-reaction-picker.spec.ts",
         "**/workflow-local-controls.spec.ts",
         "**/workflow-title-stability.spec.ts",

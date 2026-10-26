@@ -20,6 +20,7 @@ import {
   formatCrmDateTime,
 } from "@/features/crm/ui/CrmField";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
+import { CrmPartyBonuses } from "@/features/crm/ui/loyalty/CrmPartyBonuses";
 import { CrmPartyVisits } from "@/features/crm/ui/parties/CrmPartyVisits";
 import type { CrmParty, CrmPartyFields } from "@/shared/api/tauriCrmSales";
 import { Badge } from "@/shared/ui/badge";
@@ -116,6 +117,7 @@ function PartyPurchases({ party }: { party: CrmParty }) {
  * with a fresh `key` per opening so the draft starts from `party`.
  */
 export function CrmPartyDialog({
+  bonuses,
   canEdit,
   error,
   onCloseAutoFocus,
@@ -126,6 +128,8 @@ export function CrmPartyDialog({
   party,
   pending,
 }: {
+  /** Space context for the customer's bonus block. */
+  bonuses: { channelId: string; canAdjust: boolean };
   canEdit: boolean;
   error: unknown;
   onCloseAutoFocus: (event: Event) => void;
@@ -215,7 +219,14 @@ export function CrmPartyDialog({
           <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-1">
             {party ? <PartyPurchases party={party} /> : null}
             {party && party.partyType !== "supplier" ? (
-              <CrmPartyVisits customerId={party.id} />
+              <>
+                <CrmPartyBonuses
+                  canAdjust={bonuses.canAdjust}
+                  channelId={bonuses.channelId}
+                  customerId={party.id}
+                />
+                <CrmPartyVisits customerId={party.id} />
+              </>
             ) : null}
             <fieldset className="grid gap-4 sm:grid-cols-2" disabled={!canEdit}>
               <CrmField id={fieldId("type")} label={fields.type}>

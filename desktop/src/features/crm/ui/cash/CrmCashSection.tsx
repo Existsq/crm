@@ -17,7 +17,9 @@ import {
   type CashPaymentDraft,
 } from "@/features/crm/lib/cashPayment";
 import { describeCrmError } from "@/features/crm/lib/crmErrors";
+import { maxRedeemMinor, spreadBonus } from "@/features/crm/lib/loyalty";
 import { clientLabel } from "@/features/crm/lib/journal";
+import { useCrmLoyaltyQuery } from "@/features/crm/loyaltyHooks";
 import { formatRubles } from "@/features/crm/lib/money";
 import { formatClock, fromIsoDate } from "@/features/crm/lib/schedule";
 import {
@@ -28,6 +30,10 @@ import {
   saleTotals,
 } from "@/features/crm/lib/saleDraft";
 import { CrmCashCart } from "@/features/crm/ui/cash/CrmCashCart";
+import {
+  CrmCashBonuses,
+  evaluateCashBonus,
+} from "@/features/crm/ui/cash/CrmCashBonuses";
 import { CrmCashPayment } from "@/features/crm/ui/cash/CrmCashPayment";
 import { CrmCashQueue } from "@/features/crm/ui/cash/CrmCashQueue";
 import { CrmCashScanner } from "@/features/crm/ui/cash/CrmCashScanner";
@@ -208,6 +214,7 @@ export function CrmCashSection({
   const [customer, setCustomer] = React.useState<CrmParty | null>(null);
   const [payment, setPayment] =
     React.useState<CashPaymentDraft>(newCashPayment);
+  const [bonusText, setBonusText] = React.useState("");
   const [submitted, setSubmitted] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
@@ -222,6 +229,7 @@ export function CrmCashSection({
     setAppliedVisit(loaded.visit.id);
     setLines(loaded.lines);
     setCustomer(loaded.customer);
+    setBonusText("");
     setSaleId(crypto.randomUUID());
   }, [loaded, appliedVisit]);
   React.useEffect(() => {
@@ -238,7 +246,18 @@ export function CrmCashSection({
     lines.length > 0 &&
     lines.length <= MAX_SALE_LINES &&
     evaluatedLines.every((line) => line.ok);
-  const evaluatedPayment = evaluateCashPayment(payment, totals.totalMinor);
+  // Bonuses lower the receipt: they are spread over the lines as discount.
+  const loyalty = useCrmLoyaltyQuery(customer?.id ?? null);
+  const programme = loyalty.data?.programme;
+  const bonusBalance = loyalty.data?.customer?.balanceMinor ?? 0;
+  const bonusesOn = customer !== null && programme?.enabled === true;
+  const bonus = evaluateCashBonus(
+    bonusesOn ? bonusText : "",
+    programme ? maxRedeemMinor(programme, totals.totalMinor, bonusBalance) : 0,
+  );
+  const bonusMinor = bonus.ok ? bonus.bonusMinor : 0;
+  const payableMinor = totals.totalMinor - bonusMinor;
+  const evaluatedPayment = evaluateCashPayment(payment, payableMinor);
 
   const shiftOpen =
     device.data?.reachable === true && device.data.shiftState === "opened";
@@ -248,6 +267,7 @@ export function CrmCashSection({
   function reset() {
     setLines([]);
     setCustomer(null);
+    setBonusText("");
     setPayment(newCashPayment());
     setSubmitted(false);
     setSaleId(crypto.randomUUID());
@@ -258,6 +278,14 @@ export function CrmCashSection({
     event.preventDefault();
     setSubmitted(true);
     if (!linesValid || !evaluatedPayment.ok || warehouseId === "") return;
+    if (!bonus.ok) return;
+    const okLines = evaluatedLines.flatMap((line) => (line.ok ? [line] : []));
+    const saleLines = spreadBonus(
+      okLines.map((line) => line.line),
+      okLines.map((line) => line.amountMinor),
+      bonusMinor,
+    );
+    if (saleLines === null) return;
     if (blockedByShift || busy) return;
     setBusy(true);
     try {
@@ -269,7 +297,8 @@ export function CrmCashSection({
         payment: evaluatedPayment.payment,
         payments: evaluatedPayment.payments,
         cashTenderedMinor: evaluatedPayment.cashTenderedMinor,
-        lines: evaluatedLines.flatMap((line) => (line.ok ? [line.line] : [])),
+        lines: saleLines,
+        bonusMinor: bonusMinor > 0 ? bonusMinor : null,
         note: null,
         appointmentId: payingVisit?.id ?? null,
       });
@@ -400,7 +429,24 @@ export function CrmCashSection({
                 </NativeSelect>
               </CrmField>
             ) : null}
-            <CustomerPicker customer={customer} onChange={setCustomer} />
+            <CustomerPicker
+              customer={customer}
+              onChange={(next) => {
+                setCustomer(next);
+                setBonusText("");
+              }}
+            />
+            {bonusesOn && programme ? (
+              <CrmCashBonuses
+                balanceMinor={bonusBalance}
+                baseMinor={totals.totalMinor}
+                onChange={setBonusText}
+                programme={programme}
+                showErrors={submitted}
+                state={bonus}
+                value={bonusText}
+              />
+            ) : null}
             <CrmCashPayment
               draft={payment}
               evaluated={evaluatedPayment}
@@ -408,7 +454,7 @@ export function CrmCashSection({
                 setPayment((current) => ({ ...current, ...patch }))
               }
               showErrors={submitted}
-              totalMinor={totals.totalMinor}
+              totalMinor={payableMinor}
             />
             {blockedByShift ? (
               <p
@@ -429,10 +475,7 @@ export function CrmCashSection({
             >
               {busy
                 ? pay.submitting
-                : pay.submit.replace(
-                    "{total}",
-                    formatRubles(totals.totalMinor),
-                  )}
+                : pay.submit.replace("{total}", formatRubles(payableMinor))}
             </Button>
           </div>
         </form>

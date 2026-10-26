@@ -341,6 +341,10 @@ export function CrmPartiesSection({ space }: { space: CrmMemberSpace }) {
       ) : null}
 
       <CrmPartyDialog
+        bonuses={{
+          channelId: space.channelId,
+          canAdjust: space.capabilities.has("manage_space"),
+        }}
         canEdit={canEdit}
         error={write.error}
         key={dialog.session}
