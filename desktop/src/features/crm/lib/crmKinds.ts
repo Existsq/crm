@@ -22,6 +22,8 @@ export const KIND_CRM_APPOINTMENT = 42133;
 export const KIND_CRM_PAY_RATES = 42160;
 export const KIND_CRM_PAYOUT = 42161;
 export const KIND_CRM_PAYOUT_VOID = 42162;
+export const KIND_CRM_LOYALTY = 42170;
+export const KIND_CRM_BONUS_ADJUST = 42171;
 
 /** Every CRM kind the desktop subscribes to for live refresh. */
 export const CRM_KINDS: readonly number[] = [
@@ -42,4 +44,6 @@ export const CRM_KINDS: readonly number[] = [
   KIND_CRM_PAY_RATES,
   KIND_CRM_PAYOUT,
   KIND_CRM_PAYOUT_VOID,
+  KIND_CRM_LOYALTY,
+  KIND_CRM_BONUS_ADJUST,
 ];

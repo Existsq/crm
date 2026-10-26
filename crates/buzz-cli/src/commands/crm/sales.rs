@@ -80,6 +80,7 @@ pub async fn run(cmd: CrmSalesCmd, client: &BuzzClient) -> Result<String, CliErr
                 lines: sale_lines,
                 note,
                 appointment_id: None,
+                bonus_minor: None,
             };
             let sale_id = uuid::Uuid::new_v4();
             let builder = buzz_sdk::build_crm_sale(channel, sale_id, payload).map_err(sdk_err)?;

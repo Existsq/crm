@@ -24,6 +24,7 @@ pub mod analytics;
 pub mod appointments;
 pub mod catalog;
 pub mod fiscal;
+pub mod loyalty;
 pub mod parties;
 pub mod payroll;
 pub mod sales;

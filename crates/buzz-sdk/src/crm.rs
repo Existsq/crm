@@ -5,16 +5,17 @@
 //! for shape reasons. Authorization and CAS checks still happen at the relay.
 
 use buzz_core::kind::{
-    KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY,
-    KIND_CRM_PAYOUT, KIND_CRM_PAYOUT_VOID, KIND_CRM_PAY_RATES, KIND_CRM_PRODUCT, KIND_CRM_SALE,
-    KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
-    KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID, KIND_CRM_TECH_CARD, KIND_CRM_WAREHOUSE,
+    KIND_CRM_APPOINTMENT, KIND_CRM_BONUS_ADJUST, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT,
+    KIND_CRM_LOYALTY, KIND_CRM_PARTY, KIND_CRM_PAYOUT, KIND_CRM_PAYOUT_VOID, KIND_CRM_PAY_RATES,
+    KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF,
+    KIND_CRM_STAFF_SCHEDULE, KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID, KIND_CRM_TECH_CARD,
+    KIND_CRM_WAREHOUSE,
 };
 use buzz_crm::{
-    space::PAYLOAD_VERSION, tags, AppointmentPayload, CashShiftPayload, FiscalReceiptPayload,
-    PartyPayload, PayRatesPayload, PayoutPayload, PayoutVoidPayload, ProductPayload, SalePayload,
-    SaleVoidPayload, SchedulePayload, SpacePayload, SpaceSettings, StaffPayload, StockDocPayload,
-    TechCardPayload, WarehousePayload, WarehouseSeed,
+    space::PAYLOAD_VERSION, tags, AppointmentPayload, BonusAdjustPayload, CashShiftPayload,
+    FiscalReceiptPayload, LoyaltySettingsPayload, PartyPayload, PayRatesPayload, PayoutPayload,
+    PayoutVoidPayload, ProductPayload, SalePayload, SaleVoidPayload, SchedulePayload, SpacePayload,
+    SpaceSettings, StaffPayload, StockDocPayload, TechCardPayload, WarehousePayload, WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -329,6 +330,42 @@ pub fn build_crm_payout_void(channel_id: Uuid, payout_id: Uuid) -> Result<EventB
     )
 }
 
+/// Build the kind 42170 event that sets the space's loyalty programme.
+pub fn build_crm_loyalty(
+    channel_id: Uuid,
+    mut payload: LoyaltySettingsPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = LoyaltySettingsPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_LOYALTY as u16), content)
+            .tags([tag(&["h", &channel_id.to_string()])?]),
+    )
+}
+
+/// Build the kind 42171 event that adds or takes a customer's bonuses by
+/// hand. Pick `adjustment_id` once so a retried submit is a duplicate.
+pub fn build_crm_bonus_adjust(
+    channel_id: Uuid,
+    adjustment_id: Uuid,
+    mut payload: BonusAdjustPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = BonusAdjustPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_BONUS_ADJUST as u16), content).tags([
+            tag(&["h", &channel_id.to_string()])?,
+            tag(&[tags::TAG_CRM_ID, &adjustment_id.to_string()])?,
+        ]),
+    )
+}
+
 /// Build the kind 42106 event that posts stock document `doc_id` (receipt,
 /// write-off, inventory or transfer).
 ///
@@ -625,6 +662,7 @@ mod tests {
             }],
             note: None,
             appointment_id: None,
+            bonus_minor: None,
         };
         assert!(build_crm_sale(channel, sale_id, sale(0)).is_err());
         let event = build_crm_sale(channel, sale_id, sale(2000))

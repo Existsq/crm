@@ -26,6 +26,7 @@ pub mod authz;
 pub mod catalog;
 pub mod error;
 pub mod fiscal;
+pub mod loyalty;
 pub mod money;
 pub mod party;
 pub mod payroll;
@@ -46,6 +47,7 @@ pub use error::{CrmError, Result};
 pub use fiscal::{
     CashShiftPayload, FiscalOperation, FiscalParams, FiscalReceiptPayload, ShiftAction,
 };
+pub use loyalty::{BonusAdjustPayload, LoyaltySettingsPayload};
 pub use money::{line_amount, Money, Qty};
 pub use party::{PartyPayload, PartyType};
 pub use payroll::{PayRatesPayload, PayoutPayload, PayoutVoidPayload};

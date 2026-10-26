@@ -63,6 +63,9 @@ pub struct CrmSaleInput {
     /// Booked visit this sale pays for.
     #[serde(default)]
     pub appointment_id: Option<String>,
+    /// Loyalty bonuses spent, part of the line discounts.
+    #[serde(default)]
+    pub bonus_minor: Option<Money>,
 }
 
 fn non_blank(value: Option<&str>) -> Option<&str> {
@@ -282,6 +285,7 @@ fn sale_builder(input: CrmSaleInput) -> Result<(nostr::EventBuilder, uuid::Uuid)
         appointment_id: non_blank(input.appointment_id.as_deref())
             .map(|id| parse_uuid(id, "appointment id"))
             .transpose()?,
+        bonus_minor: input.bonus_minor,
     };
     let builder = buzz_sdk_pkg::build_crm_sale(channel, sale_id, payload).map_err(sdk_error)?;
     Ok((builder, sale_id))

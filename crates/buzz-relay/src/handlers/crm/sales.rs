@@ -12,7 +12,7 @@ use buzz_crm::{tags, CrmAction, CrmError, PartyType, SalePayload, SaleVoidPayloa
 use buzz_db::crm::{self as store, AppointmentPayOutcome, SaleVoidOutcome};
 
 use super::space::{conflict, invalid, require_live_space, tag_slices};
-use super::{db_error, stock};
+use super::{db_error, loyalty, stock};
 use crate::handlers::ingest::IngestError;
 
 fn rejected(message: impl std::fmt::Display) -> IngestError {
@@ -157,6 +157,8 @@ impl PreparedSale {
             .map_err(|e| db_error("pay CRM appointment", e))?;
             pay_outcome(outcome)?;
         }
+        loyalty::apply_sale_bonuses(tx, community, channel_id, self.sale_id, payload, event)
+            .await?;
         let sold: Vec<stock::SoldLine> = payload
             .lines
             .iter()
@@ -260,6 +262,15 @@ impl PreparedSaleVoid {
         )
         .await
         .map_err(|e| db_error("unpay CRM appointment", e))?;
+        buzz_db::crm::loyalty::revert_sale_bonuses(
+            tx,
+            tenant.community(),
+            self.sale_id,
+            event.id.as_bytes(),
+            &actor,
+        )
+        .await
+        .map_err(|e| db_error("revert CRM sale bonuses", e))?;
         // Returned goods go back on the shelf whatever the negative-stock rule.
         stock::revert_moves(
             tx,

@@ -1,4 +1,5 @@
-//! `GET /crm/parties` and `GET /crm/parties/{id}` — customers and suppliers.
+//! `GET /crm/parties` and `GET /crm/parties/{id}` — customers and suppliers —
+//! and `GET /crm/loyalty`, their bonus programme and balances.
 
 use std::sync::Arc;
 
@@ -23,6 +24,8 @@ use crate::{
 pub const PARTIES_PATH: &str = "/crm/parties";
 /// Route path of one party.
 pub const PARTY_PATH: &str = "/crm/parties/{party_id}";
+/// Route path of the loyalty read.
+pub const LOYALTY_PATH: &str = "/crm/loyalty";
 
 const DEFAULT_PARTY_LIMIT: i64 = 50;
 /// Longest accepted search text, in characters.
@@ -121,6 +124,55 @@ pub async fn get(
         Ok(None) => not_found("party not found").into_response(),
         Err(e) => internal_error(&format!("CRM party read: {e}")).into_response(),
     }
+}
+
+/// Query parameters of `GET /crm/loyalty`.
+#[derive(Debug, Deserialize, Default)]
+pub struct LoyaltyParams {
+    customer_id: Option<Uuid>,
+}
+
+/// `GET /crm/loyalty[?customer_id=]` — the bonus programme (all zero and off
+/// until set) and, with `customer_id`, that customer's balance and history.
+pub async fn loyalty(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Response {
+    let member =
+        match authorize_space_member(&state, &headers, LOYALTY_PATH, raw_query.as_deref()).await {
+            Ok(member) => member,
+            Err(response) => return response,
+        };
+    let params: LoyaltyParams = match parse_query_or_400(raw_query.as_deref()) {
+        Ok(params) => params,
+        Err(response) => return response.into_response(),
+    };
+    let space = member.space.channel_id;
+    let settings = match state
+        .db
+        .crm_loyalty_settings(member.community(), space)
+        .await
+    {
+        Ok(settings) => settings.unwrap_or(buzz_db::crm::loyalty::LoyaltySettingsRecord {
+            enabled: false,
+            cashback_bp: 0,
+            max_redeem_bp: 0,
+        }),
+        Err(e) => return internal_error(&format!("CRM loyalty read: {e}")).into_response(),
+    };
+    let mut body = json!({ "settings": settings });
+    if let Some(customer_id) = params.customer_id {
+        match state
+            .db
+            .crm_customer_bonuses(member.community(), space, customer_id)
+            .await
+        {
+            Ok(bonuses) => body["customer"] = json!(bonuses),
+            Err(e) => return internal_error(&format!("CRM bonuses read: {e}")).into_response(),
+        }
+    }
+    Json(body).into_response()
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! `buzz crm` — retail CRM space, warehouses, products, customers, sales,
 //! stock, payroll and analytics (kinds 42100–42199).
 
+mod loyalty;
 mod parties;
 mod payroll;
 mod products;
@@ -28,6 +29,7 @@ async fn run(cmd: CrmCmd, client: &BuzzClient) -> Result<String, CliError> {
         CrmCmd::Sales(cmd) => sales::run(cmd, client).await,
         CrmCmd::Stock(cmd) => stock::run(cmd, client).await,
         CrmCmd::Payroll(cmd) => payroll::run(cmd, client).await,
+        CrmCmd::Loyalty(cmd) => loyalty::run(cmd, client).await,
         CrmCmd::Analytics { from, to } => sales::analytics(client, from, to).await,
         CrmCmd::Space(CrmSpaceCmd::Show) => client.get_authed("/crm/space").await,
         CrmCmd::Space(CrmSpaceCmd::Init {

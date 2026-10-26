@@ -246,6 +246,31 @@ kopecks. Recorded once per id; owners and admins only.
 Content `{"v": 1, "payout_id"}` cancels a payout of the space; a second
 cancellation is a conflict. Owners and admins only.
 
+### `42170` — Loyalty programme
+
+Content `{"v": 1, "enabled", "cashback_bp", "max_redeem_bp"}` replaces the
+space's bonus programme (owners and admins). While enabled, a sale with a
+`customer_id` earns `cashback_bp` basis points of its total (rounded down) as
+bonuses, and may spend bonuses through `bonus_minor`.
+
+### `42171` — Bonus adjustment
+
+Tags `h`, `crm-id` (adjustment id). Content `{"v": 1, "customer_id",
+"delta_minor", "reason"}` adds (positive) or takes (negative) a customer's
+bonuses by hand; recorded once per id; taking more than the balance is
+rejected. Owners and admins only.
+
+### Bonuses on sales
+
+A kind 42104 sale may carry `bonus_minor`: bonuses spent on it, which must be
+positive, need a `customer_id`, and be covered by the line discounts (the
+bonuses are a discount, so the receipt and payments show what was paid in
+money). The relay rejects it when the programme is off, when the customer's
+balance is lower, or when it exceeds `max_redeem_bp` of the total before
+bonuses. In the sale's transaction the relay appends a `redeem` move and a
+`cashback` move; a kind 42105 void appends their negation (`void`), which can
+leave a balance below zero when the earned bonuses were already spent.
+
 ### Stock effects of sales
 
 A sale (`42104`) takes its goods lines off its warehouse, and for each service
@@ -320,6 +345,11 @@ otherwise) returns `{"from", "to", "staff": [{"staff_id", "name", "archived",
 "created_at"}]}`. Accruals use the current rates over done visits at their
 booked prices; `shifts` counts scheduled working days up to today; `paid_minor`
 sums payouts in the period that are not cancelled.
+`GET /crm/loyalty[?customer_id=]` returns `{"settings": {"enabled",
+"cashback_bp", "max_redeem_bp"}, "customer"?: {"balance_minor", "moves":
+[{"id", "source", "delta_minor", "sale_id", "reason", "created_at"}]}}`;
+`source` is `cashback`, `redeem`, `manual` or `void`, newest first (at most
+200). The programme reads as off with zeros until it is set.
 `GET /crm/stock?warehouse=<uuid>&q=&low=true` returns `{"warehouse_id",
 "truncated", "items": [{"product_id", "name", "sku", "unit", "category",
 "price_minor", "min_stock_milli", "qty_milli", "value_minor", "archived"}],

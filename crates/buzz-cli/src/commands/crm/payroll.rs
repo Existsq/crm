@@ -92,10 +92,10 @@ fn rubles(raw: &str, flag: &'static str) -> Result<i64, CliError> {
 }
 
 /// `40` or `12.5` percent as basis points (at most two decimals).
-fn parse_percent_bp(raw: &str) -> Result<u32, CliError> {
+pub(super) fn parse_percent_bp(raw: &str) -> Result<u32, CliError> {
     let bad = || {
         CliError::Usage(format!(
-            "--percent must be 0–100 with up to 2 decimals, got {raw:?}"
+            "percent must be 0–100 with up to 2 decimals, got {raw:?}"
         ))
     };
     let (whole, fraction) = raw.trim().split_once('.').unwrap_or((raw.trim(), ""));

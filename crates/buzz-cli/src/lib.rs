@@ -307,6 +307,9 @@ pub enum CrmCmd {
     /// Staff pay rates, payouts and payroll (owners and admins)
     #[command(subcommand)]
     Payroll(CrmPayrollCmd),
+    /// Bonus programme and customer bonus balances
+    #[command(subcommand)]
+    Loyalty(CrmLoyaltyCmd),
     /// Sales and customer analytics (GET /crm/analytics)
     Analytics {
         /// First day, YYYY-MM-DD (default: 29 days before --to)
@@ -629,6 +632,46 @@ pub enum CrmSalesCmd {
         #[arg(long)]
         sale: String,
         /// Why the sale is voided
+        #[arg(long)]
+        reason: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CrmLoyaltyCmd {
+    /// The bonus programme and, with --customer, that customer's bonuses (GET /crm/loyalty)
+    Show {
+        /// Customer UUID
+        #[arg(long)]
+        customer: Option<String>,
+    },
+    /// Set the bonus programme (kind 42170, owners and admins)
+    Set {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Turn the programme on (omit to turn it off)
+        #[arg(long)]
+        enabled: bool,
+        /// Bonuses earned, percent of the amount paid, e.g. 5
+        #[arg(long, default_value = "0")]
+        cashback: String,
+        /// Most of a sale payable with bonuses, percent, e.g. 30
+        #[arg(long, default_value = "0")]
+        max_redeem: String,
+    },
+    /// Add (positive) or take (negative) a customer's bonuses by hand (kind 42171)
+    Adjust {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Customer UUID
+        #[arg(long)]
+        customer: String,
+        /// Rubles of bonuses, e.g. 500 or -120.50
+        #[arg(long, allow_hyphen_values = true)]
+        amount: String,
+        /// Why, shown in the customer's bonus history
         #[arg(long)]
         reason: String,
     },

@@ -119,6 +119,10 @@ pub struct SalePayload {
     /// Booked visit this sale pays for (kind 42133); the relay marks it done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appointment_id: Option<Uuid>,
+    /// Loyalty bonuses spent on this sale (kind 42170 programme): part of the
+    /// line discounts, paid from the customer's bonus balance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bonus_minor: Option<Money>,
 }
 
 impl SalePayload {
@@ -155,6 +159,23 @@ impl SalePayload {
         }
         let total = payload.total()?;
         payload.check_payments(total)?;
+        if let Some(bonus) = payload.bonus_minor {
+            if bonus.minor() <= 0 {
+                return Err(CrmError::field("bonus_minor", "must be positive"));
+            }
+            if payload.customer_id.is_none() {
+                return Err(CrmError::field(
+                    "bonus_minor",
+                    "bonuses are spent by a known customer",
+                ));
+            }
+            if bonus > payload.discount_total()? {
+                return Err(CrmError::field(
+                    "bonus_minor",
+                    "must be covered by the line discounts",
+                ));
+            }
+        }
         payload.note = payload
             .note
             .as_deref()
@@ -336,6 +357,31 @@ mod tests {
             SalePayload::parse(&value.to_string()).unwrap().customer_id,
             None
         );
+    }
+
+    #[test]
+    fn bonuses_need_a_customer_and_fit_the_discounts() {
+        // `base()` discounts 9.80 ₽ across its lines.
+        let with_bonus = |bonus: i64| {
+            let mut value = base();
+            value["bonus_minor"] = json!(bonus);
+            value
+        };
+        assert_eq!(
+            SalePayload::parse(&with_bonus(980).to_string())
+                .unwrap()
+                .bonus_minor,
+            Some(Money::from_minor(980).unwrap())
+        );
+        for bonus in [0, -1, 981] {
+            assert!(
+                SalePayload::parse(&with_bonus(bonus).to_string()).is_err(),
+                "{bonus}"
+            );
+        }
+        let mut anonymous = with_bonus(100);
+        anonymous.as_object_mut().unwrap().remove("customer_id");
+        assert!(SalePayload::parse(&anonymous.to_string()).is_err());
     }
 
     #[test]
