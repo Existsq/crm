@@ -25,6 +25,7 @@ pub mod appointments;
 pub mod catalog;
 pub mod fiscal;
 pub mod parties;
+pub mod payroll;
 pub mod sales;
 pub mod staff;
 pub mod stock;

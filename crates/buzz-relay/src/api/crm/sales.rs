@@ -1,4 +1,5 @@
-//! `GET /crm/sales`, `GET /crm/sales/{id}` and `GET /crm/analytics`.
+//! `GET /crm/sales`, `GET /crm/sales/{id}`, `GET /crm/analytics` and
+//! `GET /crm/payroll`.
 
 use std::sync::Arc;
 
@@ -30,6 +31,8 @@ pub const SHIFTS_PATH: &str = "/crm/shifts";
 pub const ANALYTICS_PATH: &str = "/crm/analytics";
 /// Visit analytics: staff, services and clients.
 pub const VISIT_ANALYTICS_PATH: &str = "/crm/analytics/services";
+/// Staff payroll: accruals and payouts.
+pub const PAYROLL_PATH: &str = "/crm/payroll";
 
 const DEFAULT_SALE_LIMIT: i64 = 50;
 /// Days in the default analytics period, ending today.
@@ -266,6 +269,88 @@ pub async fn visit_analytics(
         }
         Err(e) => internal_error(&format!("CRM visit analytics read: {e}")).into_response(),
     }
+}
+
+/// `GET /crm/payroll?from&to` — what each staff member earned in the period
+/// at their current rates and what they were paid. Owners and admins only:
+/// pay is not for every member's eyes.
+pub async fn payroll(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Response {
+    let member =
+        match authorize_space_member(&state, &headers, PAYROLL_PATH, raw_query.as_deref()).await {
+            Ok(member) => member,
+            Err(response) => return response,
+        };
+    match super::space_role(&state, &member.reader, member.space.channel_id).await {
+        Ok(Some(role)) if buzz_crm::decide(role, buzz_crm::CrmAction::ManageSpace) => {}
+        Ok(_) => {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                "only space owners and admins see payroll",
+            )
+            .into_response()
+        }
+        Err(response) => return response,
+    }
+    let params: AnalyticsParams = match parse_query_or_400(raw_query.as_deref()) {
+        Ok(params) => params,
+        Err(response) => return response.into_response(),
+    };
+    let timezone = member.space.settings["timezone"]
+        .as_str()
+        .unwrap_or("UTC")
+        .to_owned();
+    let today = match state.db.crm_today_in(&timezone).await {
+        Ok(today) => today,
+        Err(e) => return internal_error(&format!("CRM payroll clock: {e}")).into_response(),
+    };
+    let (from, to) = match period_bounds(&params, today) {
+        Ok(bounds) => bounds,
+        Err(message) => return api_error(StatusCode::BAD_REQUEST, message).into_response(),
+    };
+    match state
+        .db
+        .crm_payroll(member.community(), member.space.channel_id, from, to, today)
+        .await
+    {
+        Ok(payroll) => Json(payroll_body(from, to, payroll)).into_response(),
+        Err(e) => internal_error(&format!("CRM payroll read: {e}")).into_response(),
+    }
+}
+
+fn payroll_body(
+    from: NaiveDate,
+    to: NaiveDate,
+    payroll: buzz_db::crm::payroll::PayrollRecord,
+) -> Value {
+    let staff: Vec<Value> = payroll
+        .staff
+        .into_iter()
+        .map(|row| {
+            let rates = buzz_crm::PayRatesPayload {
+                v: 1,
+                staff_id: row.staff_id,
+                percent_bp: u32::try_from(row.percent_bp).unwrap_or(0),
+                per_visit_minor: row.per_visit_minor,
+                shift_minor: row.shift_minor,
+            };
+            let accrued =
+                buzz_crm::payroll::accrued_minor(&rates, row.revenue_minor, row.visits, row.shifts);
+            let mut value = json!(row);
+            value["accrued_minor"] = json!(accrued);
+            value["balance_minor"] = json!(accrued.saturating_sub(row.paid_minor));
+            value
+        })
+        .collect();
+    json!({
+        "from": from,
+        "to": to,
+        "staff": staff,
+        "payouts": payroll.payouts,
+    })
 }
 
 #[cfg(test)]

@@ -13,6 +13,7 @@ mod decide;
 mod fiscal;
 pub(crate) mod guards;
 mod parties;
+mod payroll;
 mod sales;
 mod space;
 mod staff;
@@ -27,9 +28,9 @@ use uuid::Uuid;
 
 use buzz_core::kind::{
     event_kind_u32, KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT,
-    KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE,
-    KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE, KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID,
-    KIND_CRM_TECH_CARD, KIND_CRM_WAREHOUSE,
+    KIND_CRM_PARTY, KIND_CRM_PAYOUT, KIND_CRM_PAYOUT_VOID, KIND_CRM_PAY_RATES, KIND_CRM_PRODUCT,
+    KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
+    KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID, KIND_CRM_TECH_CARD, KIND_CRM_WAREHOUSE,
 };
 use buzz_core::tenant::TenantContext;
 
@@ -74,6 +75,9 @@ pub(crate) async fn ingest_crm_event(
             Prepared::StockDocVoid(stock::PreparedStockDocVoid::parse(event)?)
         }
         KIND_CRM_TECH_CARD => Prepared::TechCard(stock::PreparedTechCard::parse(event)?),
+        KIND_CRM_PAY_RATES => Prepared::PayRates(payroll::PreparedPayRates::parse(event)?),
+        KIND_CRM_PAYOUT => Prepared::Payout(payroll::PreparedPayout::parse(event)?),
+        KIND_CRM_PAYOUT_VOID => Prepared::PayoutVoid(payroll::PreparedPayoutVoid::parse(event)?),
         other => {
             return Err(IngestError::Rejected(format!(
                 "invalid: CRM kind {other} is not supported by this relay"
@@ -152,6 +156,9 @@ enum Prepared {
     StockDoc(stock::PreparedStockDoc),
     StockDocVoid(stock::PreparedStockDocVoid),
     TechCard(stock::PreparedTechCard),
+    PayRates(payroll::PreparedPayRates),
+    Payout(payroll::PreparedPayout),
+    PayoutVoid(payroll::PreparedPayoutVoid),
 }
 
 impl Prepared {
@@ -176,6 +183,9 @@ impl Prepared {
             Prepared::StockDoc(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
             Prepared::StockDocVoid(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
             Prepared::TechCard(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::PayRates(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::Payout(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::PayoutVoid(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
         }
     }
 }

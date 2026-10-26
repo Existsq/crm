@@ -304,6 +304,9 @@ pub enum CrmCmd {
     /// Stock levels, movements, receipts, write-offs, inventories, transfers and tech cards
     #[command(subcommand)]
     Stock(CrmStockCmd),
+    /// Staff pay rates, payouts and payroll (owners and admins)
+    #[command(subcommand)]
+    Payroll(CrmPayrollCmd),
     /// Sales and customer analytics (GET /crm/analytics)
     Analytics {
         /// First day, YYYY-MM-DD (default: 29 days before --to)
@@ -628,6 +631,64 @@ pub enum CrmSalesCmd {
         /// Why the sale is voided
         #[arg(long)]
         reason: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CrmPayrollCmd {
+    /// Accrued, paid and balance per staff member (GET /crm/payroll)
+    Show {
+        /// First day, YYYY-MM-DD (default: 29 days before --to)
+        #[arg(long)]
+        from: Option<String>,
+        /// Last day, YYYY-MM-DD (default: today in the space timezone)
+        #[arg(long)]
+        to: Option<String>,
+    },
+    /// Set a staff member's pay rates (kind 42160); omitted rates become zero
+    Rates {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Staff member UUID
+        #[arg(long)]
+        staff: String,
+        /// Percent of performed services, e.g. 40 or 12.5
+        #[arg(long, default_value = "0")]
+        percent: String,
+        /// Rubles per performed visit, e.g. 100 or 99.50
+        #[arg(long, default_value = "0")]
+        per_visit: String,
+        /// Rubles per scheduled working day
+        #[arg(long, default_value = "0")]
+        shift: String,
+    },
+    /// Record money paid to a staff member (kind 42161)
+    Pay {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Staff member UUID
+        #[arg(long)]
+        staff: String,
+        /// Amount in rubles, e.g. 15000 or 15000.50
+        #[arg(long)]
+        amount: String,
+        /// Payout date, YYYY-MM-DD in the space timezone
+        #[arg(long)]
+        date: String,
+        /// Note, e.g. "аванс"
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Cancel a payout recorded by mistake (kind 42162)
+    VoidPayout {
+        /// CRM space channel UUID
+        #[arg(long)]
+        channel: String,
+        /// Payout UUID
+        #[arg(long)]
+        payout: String,
     },
 }
 

@@ -227,6 +227,25 @@ The consumables of one service (`crm-id` = the service product, `service` or
 "qty_milli":60000}]}` (0–50 goods, one per product). Create without
 `expected-revision`, replace with it; requires `edit_catalog`.
 
+### `42160` — Staff pay rates
+
+Content `{"v": 1, "staff_id", "percent_bp", "per_visit_minor", "shift_minor"}`:
+the current rates of one staff member, replacing earlier ones. `percent_bp`
+is the share of performed services in basis points (0–10000); the other two
+are kopecks per done visit and per scheduled working day (each 0 or more).
+Owners and admins only (`manage_space`).
+
+### `42161` — Payout
+
+Tags `h`, `crm-id` (payout id). Content `{"v": 1, "staff_id", "amount_minor",
+"date": "YYYY-MM-DD", "note"?}`: money handed to a staff member, positive
+kopecks. Recorded once per id; owners and admins only.
+
+### `42162` — Payout void
+
+Content `{"v": 1, "payout_id"}` cancels a payout of the space; a second
+cancellation is a conflict. Owners and admins only.
+
 ### Stock effects of sales
 
 A sale (`42104`) takes its goods lines off its warehouse, and for each service
@@ -293,6 +312,14 @@ current time in the space timezone.
 "revenue_minor", "minutes"}], "clients": {"clients", "new_clients",
 "walk_ins"}}`. Visits count when they hold time; revenue counts done visits
 at their booked prices; `worked_min` sums the scheduled intervals.
+`GET /crm/payroll?from&to` (same period rules; owners and admins only, 403
+otherwise) returns `{"from", "to", "staff": [{"staff_id", "name", "archived",
+"percent_bp", "per_visit_minor", "shift_minor", "rates_revision", "visits",
+"revenue_minor", "shifts", "paid_minor", "accrued_minor", "balance_minor"}],
+"payouts": [{"id", "staff_id", "date", "amount_minor", "note", "voided",
+"created_at"}]}`. Accruals use the current rates over done visits at their
+booked prices; `shifts` counts scheduled working days up to today; `paid_minor`
+sums payouts in the period that are not cancelled.
 `GET /crm/stock?warehouse=<uuid>&q=&low=true` returns `{"warehouse_id",
 "truncated", "items": [{"product_id", "name", "sku", "unit", "category",
 "price_minor", "min_stock_milli", "qty_milli", "value_minor", "archived"}],

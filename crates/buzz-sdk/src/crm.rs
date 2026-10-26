@@ -6,14 +6,15 @@
 
 use buzz_core::kind::{
     KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY,
-    KIND_CRM_PRODUCT, KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF,
-    KIND_CRM_STAFF_SCHEDULE, KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID, KIND_CRM_TECH_CARD,
-    KIND_CRM_WAREHOUSE,
+    KIND_CRM_PAYOUT, KIND_CRM_PAYOUT_VOID, KIND_CRM_PAY_RATES, KIND_CRM_PRODUCT, KIND_CRM_SALE,
+    KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
+    KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID, KIND_CRM_TECH_CARD, KIND_CRM_WAREHOUSE,
 };
 use buzz_crm::{
     space::PAYLOAD_VERSION, tags, AppointmentPayload, CashShiftPayload, FiscalReceiptPayload,
-    PartyPayload, ProductPayload, SalePayload, SaleVoidPayload, SchedulePayload, SpacePayload,
-    SpaceSettings, StaffPayload, StockDocPayload, TechCardPayload, WarehousePayload, WarehouseSeed,
+    PartyPayload, PayRatesPayload, PayoutPayload, PayoutVoidPayload, ProductPayload, SalePayload,
+    SaleVoidPayload, SchedulePayload, SpacePayload, SpaceSettings, StaffPayload, StockDocPayload,
+    TechCardPayload, WarehousePayload, WarehouseSeed,
 };
 use nostr::{EventBuilder, Kind, Tag};
 use uuid::Uuid;
@@ -275,6 +276,55 @@ pub fn build_crm_staff_schedule(
         serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
     Ok(
         EventBuilder::new(Kind::Custom(KIND_CRM_STAFF_SCHEDULE as u16), content)
+            .tags([tag(&["h", &channel_id.to_string()])?]),
+    )
+}
+
+/// Build the kind 42160 event that sets the pay rates of one staff member.
+pub fn build_crm_pay_rates(
+    channel_id: Uuid,
+    mut payload: PayRatesPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = PayRatesPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_PAY_RATES as u16), content)
+            .tags([tag(&["h", &channel_id.to_string()])?]),
+    )
+}
+
+/// Build the kind 42161 event that records payout `payout_id` to a staff
+/// member. Pick the id once per payout so a retried submit is a duplicate.
+pub fn build_crm_payout(
+    channel_id: Uuid,
+    payout_id: Uuid,
+    mut payload: PayoutPayload,
+) -> Result<EventBuilder, SdkError> {
+    payload.v = PAYLOAD_VERSION;
+    let raw = serde_json::to_string(&payload).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    let normalized = PayoutPayload::parse(&raw).map_err(invalid)?;
+    let content =
+        serde_json::to_string(&normalized).map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_PAYOUT as u16), content).tags([
+            tag(&["h", &channel_id.to_string()])?,
+            tag(&[tags::TAG_CRM_ID, &payout_id.to_string()])?,
+        ]),
+    )
+}
+
+/// Build the kind 42162 event that cancels payout `payout_id`.
+pub fn build_crm_payout_void(channel_id: Uuid, payout_id: Uuid) -> Result<EventBuilder, SdkError> {
+    let content = serde_json::to_string(&PayoutVoidPayload {
+        v: PAYLOAD_VERSION,
+        payout_id,
+    })
+    .map_err(|e| SdkError::InvalidInput(e.to_string()))?;
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_CRM_PAYOUT_VOID as u16), content)
             .tags([tag(&["h", &channel_id.to_string()])?]),
     )
 }

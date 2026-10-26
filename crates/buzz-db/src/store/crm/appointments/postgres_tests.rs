@@ -498,3 +498,138 @@ async fn visit_analytics_count_staff_services_and_clients() {
         }
     );
 }
+
+#[tokio::test]
+#[ignore = "requires Postgres"]
+async fn payroll_counts_done_visits_shifts_and_payouts() {
+    use crate::crm::payroll::{
+        record_payout, void_payout, write_pay_rates, PayRatesWrite, PayoutVoidOutcome, PayoutWrite,
+        PayrollWriteOutcome,
+    };
+    let fx = fixture().await;
+    let haircut = product(&fx, "service", Some(60)).await;
+    let olga = staff(&fx, &[haircut]).await;
+    let idle = staff(&fx, &[haircut]).await;
+    for (start, status) in [
+        (600, "done"),
+        (660, "done"),
+        (720, "booked"),
+        (900, "no_show"),
+    ] {
+        let mut b = booking(olga, haircut, start);
+        b.status = status;
+        assert_eq!(
+            book(&fx, &b, 9, None).await,
+            AppointmentWriteOutcome::Written
+        );
+    }
+
+    let mut tx = fx.db.begin_event_write_transaction().await.unwrap();
+    let rates = PayRatesWrite {
+        space_channel_id: fx.space,
+        staff_id: olga,
+        percent_bp: 4000,
+        per_visit_minor: 10_000,
+        shift_minor: 50_000,
+        revision_event_id: &[3; 32],
+    };
+    assert_eq!(
+        write_pay_rates(&mut tx, fx.community, rates).await.unwrap(),
+        PayrollWriteOutcome::Written
+    );
+    let foreign = PayRatesWrite {
+        staff_id: Uuid::new_v4(),
+        ..rates
+    };
+    assert_eq!(
+        write_pay_rates(&mut tx, fx.community, foreign)
+            .await
+            .unwrap(),
+        PayrollWriteOutcome::UnknownStaff
+    );
+    let advance = PayoutWrite {
+        payout_id: Uuid::new_v4(),
+        space_channel_id: fx.space,
+        staff_id: olga,
+        day: day(),
+        amount_minor: 70_000,
+        note: Some("аванс"),
+        event_id: &[4; 32],
+        actor: &fx.actor,
+    };
+    assert_eq!(
+        record_payout(&mut tx, fx.community, advance).await.unwrap(),
+        PayrollWriteOutcome::Written
+    );
+    assert_eq!(
+        record_payout(&mut tx, fx.community, advance).await.unwrap(),
+        PayrollWriteOutcome::AlreadyExists
+    );
+    let mistake = PayoutWrite {
+        payout_id: Uuid::new_v4(),
+        amount_minor: 1_000,
+        event_id: &[5; 32],
+        ..advance
+    };
+    assert_eq!(
+        record_payout(&mut tx, fx.community, mistake).await.unwrap(),
+        PayrollWriteOutcome::Written
+    );
+    assert_eq!(
+        void_payout(&mut tx, fx.community, fx.space, mistake.payout_id, &[6; 32])
+            .await
+            .unwrap(),
+        PayoutVoidOutcome::Voided
+    );
+    assert_eq!(
+        void_payout(&mut tx, fx.community, fx.space, mistake.payout_id, &[7; 32])
+            .await
+            .unwrap(),
+        PayoutVoidOutcome::AlreadyVoided
+    );
+    assert_eq!(
+        void_payout(&mut tx, fx.community, fx.space, Uuid::new_v4(), &[8; 32])
+            .await
+            .unwrap(),
+        PayoutVoidOutcome::Missing
+    );
+    tx.commit().await.unwrap();
+
+    let payroll = fx
+        .db
+        .crm_payroll(fx.community, fx.space, day(), day(), day())
+        .await
+        .unwrap();
+    assert_eq!(payroll.staff.len(), 2);
+    let row = payroll
+        .staff
+        .iter()
+        .find(|row| row.staff_id == olga)
+        .unwrap();
+    assert_eq!((row.visits, row.revenue_minor), (2, 300_000));
+    assert_eq!(row.shifts, 1);
+    assert_eq!(row.paid_minor, 70_000);
+    assert_eq!(row.percent_bp, 4000);
+    assert_eq!(row.rates_revision.as_deref(), Some(&[3_u8; 32][..]));
+    let other = payroll
+        .staff
+        .iter()
+        .find(|row| row.staff_id == idle)
+        .unwrap();
+    assert_eq!(
+        (other.visits, other.percent_bp, other.paid_minor),
+        (0, 0, 0)
+    );
+    assert_eq!(other.rates_revision, None);
+    assert_eq!(payroll.payouts.len(), 2);
+    assert!(payroll.payouts.iter().any(|p| p.voided));
+
+    // Working days after `today` are not paid yet.
+    let before = day().pred_opt().unwrap();
+    let early = fx
+        .db
+        .crm_payroll(fx.community, fx.space, day(), day(), before)
+        .await
+        .unwrap();
+    assert!(early.staff.iter().all(|row| row.shifts == 0));
+}

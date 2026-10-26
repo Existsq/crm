@@ -366,6 +366,12 @@ pub const KIND_CRM_STAFF: u32 = 42131;
 pub const KIND_CRM_STAFF_SCHEDULE: u32 = 42132;
 /// CRM appointment: a client booked with a staff member (CAS by `crm-id`).
 pub const KIND_CRM_APPOINTMENT: u32 = 42133;
+/// CRM staff pay rates: percent of services, per visit and per working day.
+pub const KIND_CRM_PAY_RATES: u32 = 42160;
+/// CRM payout of money to a staff member (`crm-id` is the payout id).
+pub const KIND_CRM_PAYOUT: u32 = 42161;
+/// CRM payout cancellation.
+pub const KIND_CRM_PAYOUT_VOID: u32 = 42162;
 
 // NIP-29 group admin events
 /// NIP-29: Add a user to a group.
@@ -714,6 +720,9 @@ pub const ALL_KINDS: &[u32] = &[
     KIND_CRM_STAFF,
     KIND_CRM_STAFF_SCHEDULE,
     KIND_CRM_APPOINTMENT,
+    KIND_CRM_PAY_RATES,
+    KIND_CRM_PAYOUT,
+    KIND_CRM_PAYOUT_VOID,
     KIND_NIP29_PUT_USER,
     KIND_NIP29_REMOVE_USER,
     KIND_NIP29_EDIT_METADATA,
@@ -965,6 +974,8 @@ const _: () = assert!(is_crm_kind(KIND_CRM_SALE_VOID));
 const _: () = assert!(is_crm_kind(KIND_CRM_FISCAL_RECEIPT) && is_crm_kind(KIND_CRM_CASH_SHIFT));
 const _: () = assert!(is_crm_kind(KIND_CRM_STAFF) && is_crm_kind(KIND_CRM_STAFF_SCHEDULE));
 const _: () = assert!(is_crm_kind(KIND_CRM_APPOINTMENT));
+const _: () = assert!(is_crm_kind(KIND_CRM_PAY_RATES) && is_crm_kind(KIND_CRM_PAYOUT));
+const _: () = assert!(is_crm_kind(KIND_CRM_PAYOUT_VOID));
 const _: () = assert!(is_crm_kind(KIND_CRM_STOCK_DOC) && is_crm_kind(KIND_CRM_STOCK_DOC_VOID));
 const _: () = assert!(is_crm_kind(KIND_CRM_TECH_CARD));
 const _: () = assert!(!is_crm_kind(KIND_PRODUCT_FEEDBACK));

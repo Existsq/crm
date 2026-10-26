@@ -28,6 +28,7 @@ pub mod error;
 pub mod fiscal;
 pub mod money;
 pub mod party;
+pub mod payroll;
 pub mod sale;
 pub mod space;
 pub mod staff;
@@ -47,6 +48,7 @@ pub use fiscal::{
 };
 pub use money::{line_amount, Money, Qty};
 pub use party::{PartyPayload, PartyType};
+pub use payroll::{PayRatesPayload, PayoutPayload, PayoutVoidPayload};
 pub use sale::{PaymentMethod, SaleLine, SalePayload, SalePayment, SaleVoidPayload};
 pub use space::{
     Currency, FiscalizationMode, SpacePayload, SpaceSettings, WarehousePayload, WarehouseSeed,
