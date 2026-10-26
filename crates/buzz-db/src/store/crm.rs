@@ -3,7 +3,8 @@
 //! [`parties`] (0052), sale documents in [`sales`] (0053) and the read-only
 //! [`analytics`] over them; fiscal receipts and cash shifts in [`fiscal`]
 //! (0054); staff and their working days in [`staff`] (0055); appointments
-//! in [`appointments`] (0056); visit reminders in [`reminders`] (0064).
+//! in [`appointments`] (0056) with [`visit_analytics`] over them; the stock ledger and service tech cards in
+//! [`stock`] (0060); visit reminders in [`reminders`] (0064).
 //!
 //! Writes run inside the caller's event-write transaction so the signed CRM
 //! event and its projection rows commit or roll back together (ADR-0001).
@@ -27,11 +28,13 @@ pub mod parties;
 pub mod reminders;
 pub mod sales;
 pub mod staff;
+pub mod stock;
+pub mod visit_analytics;
 
 pub use analytics::{AnalyticsPeriod, SalesAnalytics};
 pub use appointments::{
-    AppointmentQuery, AppointmentServiceWrite, AppointmentWrite, AppointmentWriteOutcome,
-    CrmAppointmentRecord, SlotInputs, MAX_APPOINTMENT_RANGE_DAYS,
+    AppointmentPayOutcome, AppointmentQuery, AppointmentServiceWrite, AppointmentWrite,
+    AppointmentWriteOutcome, CrmAppointmentRecord, SlotInputs, MAX_APPOINTMENT_RANGE_DAYS,
 };
 pub use catalog::{
     CrmProductRecord, ProductPage, ProductQuery, ProductWrite, ProductWriteOutcome,
@@ -53,6 +56,11 @@ pub use sales::{
 pub use staff::{
     CrmStaffDayRecord, CrmStaffRecord, ScheduleWriteOutcome, StaffDayWrite, StaffWrite,
     StaffWriteOutcome, MAX_SCHEDULE_RANGE_DAYS,
+};
+pub use stock::{
+    CrmStockDocRecord, CrmStockMoveRecord, CrmStockRecord, CrmTechCardRecord, StockDocPage,
+    StockDocQuery, StockDocVoidOutcome, StockList, StockMovePage, StockMoveQuery, StockQuery,
+    TechCardWriteOutcome, MAX_STOCK_LIST, MAX_STOCK_PAGE,
 };
 
 /// Channel facts needed to decide whether a channel can host a CRM space.

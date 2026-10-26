@@ -53,6 +53,17 @@ const KNOWN_REASONS: ReadonlyArray<{
     pattern: /^the visit is paid()/,
     template: ru.errors.visitPaid,
   },
+  // Stock rejections name the product; say what to do about them.
+  {
+    prefix: "invalid",
+    pattern: /not enough stock of "(.+?)" to void/,
+    template: ru.errors.stockAlreadyUsed,
+  },
+  {
+    prefix: "invalid",
+    pattern: /not enough stock of "(.+?)"/,
+    template: ru.errors.notEnoughStock,
+  },
 ];
 
 function relayMessage(

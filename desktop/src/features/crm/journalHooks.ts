@@ -10,6 +10,7 @@ import { crmQueryRoot } from "@/features/crm/hooks";
 import {
   type CrmAppointmentWriteInput,
   getCrmSlots,
+  getCrmVisitAnalytics,
   listCrmAppointments,
   listCrmCustomerAppointments,
   writeCrmAppointment,
@@ -76,5 +77,18 @@ export function useWriteCrmAppointmentMutation() {
   return useMutation({
     mutationFn: (input: CrmAppointmentWriteInput) => writeCrmAppointment(input),
     onSettled: invalidate,
+  });
+}
+
+/** Visit analytics for one period. */
+export function useCrmVisitAnalyticsQuery(period: {
+  from: string | null;
+  to: string | null;
+}) {
+  return useQuery({
+    queryKey: [...journalRoot, "analytics", period.from, period.to],
+    queryFn: () => getCrmVisitAnalytics(period),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   });
 }

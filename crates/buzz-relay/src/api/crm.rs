@@ -30,6 +30,7 @@ pub mod products;
 pub mod reminders;
 pub mod sales;
 pub mod staff;
+pub mod stock;
 
 /// Route path of the space read.
 pub const SPACE_PATH: &str = "/crm/space";

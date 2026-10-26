@@ -70,12 +70,11 @@ test("sidebar entry opens the CRM and marks itself active", async ({
 test("sidebar sub-items switch CRM sections", async ({ page }) => {
   await openCrm(page, memberSeed("owner"));
   const nav = page.getByRole("navigation", { name: "Разделы CRM" });
-  await nav.getByRole("button", { name: "Аналитика" }).click();
+  await nav.getByRole("button", { name: "Аналитика", exact: true }).click();
   await expect(page).toHaveURL(/#\/crm\/analytics$/);
-  await expect(nav.getByRole("button", { name: "Аналитика" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(
+    nav.getByRole("button", { name: "Аналитика", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   await expect(page.getByTestId("crm-analytics")).toBeVisible();
   await nav.getByRole("button", { name: "Настройки" }).click();
   await expect(page.getByTestId("crm-settings-form")).toBeVisible();

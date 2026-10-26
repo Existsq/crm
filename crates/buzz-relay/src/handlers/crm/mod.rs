@@ -17,6 +17,7 @@ mod reminders;
 mod sales;
 mod space;
 mod staff;
+mod stock;
 
 use std::sync::Arc;
 
@@ -29,7 +30,7 @@ use buzz_core::kind::{
     event_kind_u32, KIND_CRM_APPOINTMENT, KIND_CRM_CASH_SHIFT, KIND_CRM_CLIENT_TELEGRAM,
     KIND_CRM_FISCAL_RECEIPT, KIND_CRM_PARTY, KIND_CRM_PRODUCT, KIND_CRM_REMINDER_SETTINGS,
     KIND_CRM_SALE, KIND_CRM_SALE_VOID, KIND_CRM_SPACE, KIND_CRM_STAFF, KIND_CRM_STAFF_SCHEDULE,
-    KIND_CRM_WAREHOUSE,
+    KIND_CRM_STOCK_DOC, KIND_CRM_STOCK_DOC_VOID, KIND_CRM_TECH_CARD, KIND_CRM_WAREHOUSE,
 };
 use buzz_core::tenant::TenantContext;
 
@@ -75,6 +76,11 @@ pub(crate) async fn ingest_crm_event(
         KIND_CRM_CLIENT_TELEGRAM => {
             Prepared::ClientTelegram(reminders::PreparedClientTelegram::parse(event)?)
         }
+        KIND_CRM_STOCK_DOC => Prepared::StockDoc(stock::PreparedStockDoc::parse(event)?),
+        KIND_CRM_STOCK_DOC_VOID => {
+            Prepared::StockDocVoid(stock::PreparedStockDocVoid::parse(event)?)
+        }
+        KIND_CRM_TECH_CARD => Prepared::TechCard(stock::PreparedTechCard::parse(event)?),
         other => {
             return Err(IngestError::Rejected(format!(
                 "invalid: CRM kind {other} is not supported by this relay"
@@ -152,6 +158,9 @@ enum Prepared {
     Appointment(appointments::PreparedAppointment),
     ReminderSettings(reminders::PreparedReminderSettings),
     ClientTelegram(reminders::PreparedClientTelegram),
+    StockDoc(stock::PreparedStockDoc),
+    StockDocVoid(stock::PreparedStockDocVoid),
+    TechCard(stock::PreparedTechCard),
 }
 
 impl Prepared {
@@ -179,6 +188,9 @@ impl Prepared {
             Prepared::ClientTelegram(prepared) => {
                 prepared.apply(tx, tenant, event, channel_id).await
             }
+            Prepared::StockDoc(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::StockDocVoid(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
+            Prepared::TechCard(prepared) => prepared.apply(tx, tenant, event, channel_id).await,
         }
     }
 }

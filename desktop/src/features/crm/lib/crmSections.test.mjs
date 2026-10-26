@@ -23,6 +23,7 @@ test("the default section is the first one: the catalog", () => {
     CRM_SECTIONS.map((section) => section.id),
     [
       "products",
+      "stock",
       "journal",
       "reminders",
       "services",
@@ -32,6 +33,7 @@ test("the default section is the first one: the catalog", () => {
       "cash",
       "sales",
       "analytics",
+      "staff-analytics",
       "settings",
     ],
   );

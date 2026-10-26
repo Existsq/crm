@@ -23,7 +23,8 @@ pub use crm::{
     build_crm_appointment, build_crm_cash_shift, build_crm_client_telegram,
     build_crm_fiscal_receipt, build_crm_party, build_crm_product, build_crm_reminder_settings,
     build_crm_sale, build_crm_sale_void, build_crm_space_create, build_crm_space_update,
-    build_crm_staff, build_crm_staff_schedule, build_crm_warehouse,
+    build_crm_staff, build_crm_staff_schedule, build_crm_stock_doc, build_crm_stock_doc_void,
+    build_crm_tech_card, build_crm_warehouse,
 };
 
 /// Re-export kind constants so consumers don't need buzz-core directly.

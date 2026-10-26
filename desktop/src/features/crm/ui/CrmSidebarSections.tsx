@@ -10,8 +10,10 @@ import {
   ReceiptText,
   Scissors,
   Settings,
+  TrendingUp,
   ShoppingCart,
   Users,
+  Warehouse,
 } from "lucide-react";
 
 import { ru } from "@/features/crm/i18n/ru";
@@ -28,6 +30,7 @@ import {
 
 const SECTION_ICONS: Record<CrmSectionId, LucideIcon> = {
   products: Package,
+  stock: Warehouse,
   journal: CalendarClock,
   reminders: BellRing,
   services: Scissors,
@@ -37,6 +40,7 @@ const SECTION_ICONS: Record<CrmSectionId, LucideIcon> = {
   cash: ShoppingCart,
   sales: ReceiptText,
   analytics: BarChart3,
+  "staff-analytics": TrendingUp,
   settings: Settings,
 };
 

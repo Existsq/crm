@@ -438,3 +438,63 @@ async fn slot_inputs_list_capable_staff_and_busy_time() {
     assert_eq!(both.staff.len(), 2);
     assert!(both.staff.iter().any(|s| s.0 == anna));
 }
+
+#[tokio::test]
+#[ignore = "requires Postgres"]
+async fn visit_analytics_count_staff_services_and_clients() {
+    use crate::crm::AnalyticsPeriod;
+    let fx = fixture().await;
+    let haircut = product(&fx, "service", Some(60)).await;
+    let olga = staff(&fx, &[haircut]).await;
+    let idle = staff(&fx, &[haircut]).await;
+    let pyotr = customer(&fx).await;
+    for (start, status, customer) in [
+        (600, "done", Some(pyotr)),
+        (660, "done", None),
+        (720, "booked", Some(pyotr)),
+        (900, "no_show", None),
+        (960, "cancelled", None),
+    ] {
+        let mut b = booking(olga, haircut, start);
+        b.status = status;
+        b.customer = customer;
+        assert_eq!(
+            book(&fx, &b, 9, None).await,
+            AppointmentWriteOutcome::Written
+        );
+    }
+    let period = AnalyticsPeriod {
+        from: day(),
+        to: day(),
+        timezone: "Europe/Moscow".into(),
+    };
+    let stats = fx
+        .db
+        .crm_visit_analytics(fx.community, fx.space, &period)
+        .await
+        .unwrap();
+    assert_eq!(stats.staff.len(), 2);
+    let top = &stats.staff[0];
+    assert_eq!(top.staff_id, olga);
+    assert_eq!(
+        (top.visits, top.done, top.no_shows, top.cancelled),
+        (3, 2, 1, 1)
+    );
+    assert_eq!(top.revenue_minor, 300_000);
+    assert_eq!(top.booked_min, 180);
+    assert_eq!(top.worked_min, 540);
+    assert_eq!(stats.staff[1].staff_id, idle);
+    assert_eq!(stats.staff[1].visits, 0);
+    assert_eq!(stats.services.len(), 1);
+    assert_eq!(stats.services[0].product_id, haircut);
+    assert_eq!(stats.services[0].visits, 3);
+    assert_eq!(stats.services[0].minutes, 180);
+    assert_eq!(
+        stats.clients,
+        crate::crm::visit_analytics::VisitClients {
+            clients: 1,
+            new_clients: 1,
+            walk_ins: 1,
+        }
+    );
+}

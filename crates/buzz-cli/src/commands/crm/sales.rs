@@ -79,6 +79,7 @@ pub async fn run(cmd: CrmSalesCmd, client: &BuzzClient) -> Result<String, CliErr
                 cash_tendered_minor: None,
                 lines: sale_lines,
                 note,
+                appointment_id: None,
             };
             let sale_id = uuid::Uuid::new_v4();
             let builder = buzz_sdk::build_crm_sale(channel, sale_id, payload).map_err(sdk_err)?;
@@ -169,7 +170,7 @@ async fn catalog_price(client: &BuzzClient, product: uuid::Uuid) -> Result<Money
         .ok_or_else(|| CliError::Other(format!("product {product} has no price")))
 }
 
-async fn default_warehouse(client: &BuzzClient) -> Result<uuid::Uuid, CliError> {
+pub(super) async fn default_warehouse(client: &BuzzClient) -> Result<uuid::Uuid, CliError> {
     let space: serde_json::Value = serde_json::from_str(&client.get_authed("/crm/space").await?)
         .map_err(|e| CliError::Other(format!("unexpected /crm/space response: {e}")))?;
     space["warehouses"]

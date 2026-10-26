@@ -7,6 +7,7 @@ import {
   type CrmSectionId,
 } from "@/features/crm/lib/crmSections";
 import { CrmAnalyticsSection } from "@/features/crm/ui/analytics/CrmAnalyticsSection";
+import { CrmStaffAnalyticsSection } from "@/features/crm/ui/analytics/CrmStaffAnalyticsSection";
 import { CrmCashSection } from "@/features/crm/ui/cash/CrmCashSection";
 import { CrmJournalSection } from "@/features/crm/ui/journal/CrmJournalSection";
 import { CrmRemindersSection } from "@/features/crm/ui/reminders/CrmRemindersSection";
@@ -16,6 +17,7 @@ import { CrmProductsSection } from "@/features/crm/ui/products/CrmProductsSectio
 import { CrmSalesSection } from "@/features/crm/ui/sales/CrmSalesSection";
 import { CrmScheduleSection } from "@/features/crm/ui/staff/CrmScheduleSection";
 import { CrmStaffSection } from "@/features/crm/ui/staff/CrmStaffSection";
+import { CrmStockSection } from "@/features/crm/ui/stock/CrmStockSection";
 import { CrmSpaceGate } from "@/features/crm/ui/CrmSpaceGate";
 import type { CrmMemberSpace } from "@/shared/api/tauriCrm";
 import { cn } from "@/shared/lib/cn";
@@ -23,24 +25,33 @@ import { Button } from "@/shared/ui/button";
 
 type CrmViewProps = {
   section: CrmSectionId;
+  /** Booked visit the cash desk takes payment for. */
+  visit?: string;
+  onOpenSection: (section: CrmSectionId, visit?: string) => void;
 };
 
 function CrmSectionContent({
+  onOpenSection,
   section,
   space,
-}: {
-  section: CrmSectionId;
-  space: CrmMemberSpace;
-}) {
+  visit,
+}: CrmViewProps & { space: CrmMemberSpace }) {
   switch (section) {
     case "products":
       return <CrmProductsSection space={space} />;
     case "journal":
-      return <CrmJournalSection space={space} />;
+      return (
+        <CrmJournalSection
+          onPayVisit={(id) => onOpenSection("cash", id)}
+          space={space}
+        />
+      );
     case "reminders":
       return <CrmRemindersSection space={space} />;
     case "services":
       return <CrmProductsSection kind="services" space={space} />;
+    case "stock":
+      return <CrmStockSection space={space} />;
     case "staff":
       return <CrmStaffSection space={space} />;
     case "schedule":
@@ -48,17 +59,25 @@ function CrmSectionContent({
     case "parties":
       return <CrmPartiesSection space={space} />;
     case "cash":
-      return <CrmCashSection space={space} />;
+      return (
+        <CrmCashSection
+          onVisitDone={() => onOpenSection("cash")}
+          space={space}
+          visit={visit ?? null}
+        />
+      );
     case "sales":
       return <CrmSalesSection space={space} />;
     case "analytics":
       return <CrmAnalyticsSection space={space} />;
+    case "staff-analytics":
+      return <CrmStaffAnalyticsSection space={space} />;
     case "settings":
       return <CrmSettingsSection space={space} />;
   }
 }
 
-export function CrmView({ section }: CrmViewProps) {
+export function CrmView({ onOpenSection, section, visit }: CrmViewProps) {
   const spaceQuery = useCrmSpaceQuery();
   const space = spaceQuery.data;
   useCrmLiveUpdates(space?.status === "member" ? space.channelId : null);
@@ -100,7 +119,12 @@ export function CrmView({ section }: CrmViewProps) {
 
           <CrmSpaceGate query={spaceQuery}>
             {(memberSpace) => (
-              <CrmSectionContent section={section} space={memberSpace} />
+              <CrmSectionContent
+                onOpenSection={onOpenSection}
+                section={section}
+                space={memberSpace}
+                visit={visit}
+              />
             )}
           </CrmSpaceGate>
         </div>

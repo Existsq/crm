@@ -354,6 +354,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             api::crm::appointments::SLOTS_PATH,
             get(api::crm::appointments::slots),
         )
+        .route(api::crm::stock::STOCK_PATH, get(api::crm::stock::levels))
+        .route(api::crm::stock::MOVES_PATH, get(api::crm::stock::moves))
+        .route(api::crm::stock::DOCS_PATH, get(api::crm::stock::docs))
+        .route(api::crm::stock::DOC_PATH, get(api::crm::stock::doc))
+        .route(
+            api::crm::stock::TECH_CARDS_PATH,
+            get(api::crm::stock::tech_cards),
+        )
         .route(
             api::crm::reminders::REMINDERS_PATH,
             get(api::crm::reminders::settings),
@@ -374,6 +382,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             api::crm::sales::ANALYTICS_PATH,
             get(api::crm::sales::analytics),
+        )
+        .route(
+            api::crm::sales::VISIT_ANALYTICS_PATH,
+            get(api::crm::sales::visit_analytics),
         )
         .route(
             "/operator/communities",

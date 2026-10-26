@@ -9,10 +9,10 @@ use uuid::Uuid;
 
 use buzz_core::tenant::TenantContext;
 use buzz_crm::{tags, CrmAction, CrmError, PartyType, SalePayload, SaleVoidPayload, Unit};
-use buzz_db::crm::{self as store, SaleVoidOutcome};
+use buzz_db::crm::{self as store, AppointmentPayOutcome, SaleVoidOutcome};
 
-use super::db_error;
 use super::space::{conflict, invalid, require_live_space, tag_slices};
+use super::{db_error, stock};
 use crate::handlers::ingest::IngestError;
 
 fn rejected(message: impl std::fmt::Display) -> IngestError {
@@ -144,7 +144,37 @@ impl PreparedSale {
         store::sales::insert_sale(tx, community, &sale)
             .await
             .map_err(|e| db_error("insert CRM sale", e))?;
-        Ok(())
+        if let Some(appointment_id) = payload.appointment_id {
+            let outcome = store::appointments::pay_appointment(
+                tx,
+                community,
+                channel_id,
+                appointment_id,
+                self.sale_id,
+                event.id.as_bytes(),
+            )
+            .await
+            .map_err(|e| db_error("pay CRM appointment", e))?;
+            pay_outcome(outcome)?;
+        }
+        let sold: Vec<stock::SoldLine> = payload
+            .lines
+            .iter()
+            .map(|line| stock::SoldLine {
+                product_id: line.product_id,
+                qty: line.qty_milli,
+            })
+            .collect();
+        stock::post_sale(
+            tx,
+            community,
+            channel_id,
+            self.sale_id,
+            payload.warehouse_id,
+            &sold,
+            event,
+        )
+        .await
     }
 }
 
@@ -206,7 +236,8 @@ impl PreparedSaleVoid {
             channel_id,
             &actor,
             CrmAction::VoidDocuments,
-            false,
+            // Exclusive: the returned goods change stock levels.
+            true,
         )
         .await?;
         let outcome = store::sales::void_sale(
@@ -220,7 +251,39 @@ impl PreparedSaleVoid {
         )
         .await
         .map_err(|e| db_error("void CRM sale", e))?;
-        void_outcome(outcome)
+        void_outcome(outcome)?;
+        store::appointments::unpay_appointment(
+            tx,
+            tenant.community(),
+            self.sale_id,
+            event.id.as_bytes(),
+        )
+        .await
+        .map_err(|e| db_error("unpay CRM appointment", e))?;
+        // Returned goods go back on the shelf whatever the negative-stock rule.
+        stock::revert_moves(
+            tx,
+            tenant.community(),
+            channel_id,
+            self.sale_id,
+            stock::SALE_SOURCES,
+            true,
+            event,
+        )
+        .await
+    }
+}
+
+fn pay_outcome(outcome: AppointmentPayOutcome) -> Result<(), IngestError> {
+    match outcome {
+        AppointmentPayOutcome::Paid => Ok(()),
+        AppointmentPayOutcome::Missing => Err(rejected(
+            "appointment_id: not an appointment of this CRM space",
+        )),
+        AppointmentPayOutcome::AlreadyPaid => Err(conflict("the visit is already paid")),
+        AppointmentPayOutcome::NotPayable => Err(rejected(
+            "appointment_id: a cancelled or missed visit cannot be paid",
+        )),
     }
 }
 
@@ -277,6 +340,21 @@ mod tests {
         assert!(check_customer(&party("both", false)).is_ok());
         assert!(rejection(check_customer(&party("supplier", false))).contains("supplier"));
         assert!(rejection(check_customer(&party("customer", true))).contains("archived"));
+    }
+
+    #[test]
+    fn visit_payments_map_to_relay_prefixes() {
+        assert!(pay_outcome(AppointmentPayOutcome::Paid).is_ok());
+        assert!(matches!(
+            pay_outcome(AppointmentPayOutcome::AlreadyPaid),
+            Err(IngestError::CanvasConflict(message)) if message.starts_with("conflict: ")
+        ));
+        for outcome in [
+            AppointmentPayOutcome::Missing,
+            AppointmentPayOutcome::NotPayable,
+        ] {
+            assert!(rejection(pay_outcome(outcome)).starts_with("invalid: appointment_id"));
+        }
     }
 
     #[test]

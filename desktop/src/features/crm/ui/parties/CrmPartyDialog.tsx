@@ -21,6 +21,7 @@ import {
 } from "@/features/crm/ui/CrmField";
 import { CrmErrorAlert } from "@/features/crm/ui/CrmErrorAlert";
 import { CrmPartyTelegram } from "@/features/crm/ui/parties/CrmPartyTelegram";
+import { CrmPartyVisits } from "@/features/crm/ui/parties/CrmPartyVisits";
 import type { CrmParty, CrmPartyFields } from "@/shared/api/tauriCrmSales";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -218,11 +219,14 @@ export function CrmPartyDialog({
           <div className="-mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-1">
             {party ? <PartyPurchases party={party} /> : null}
             {party && party.partyType !== "supplier" ? (
-              <CrmPartyTelegram
-                canEdit={canEdit}
-                channelId={channelId}
-                partyId={party.id}
-              />
+              <>
+                <CrmPartyVisits customerId={party.id} />
+                <CrmPartyTelegram
+                  canEdit={canEdit}
+                  channelId={channelId}
+                  partyId={party.id}
+                />
+              </>
             ) : null}
             <fieldset className="grid gap-4 sm:grid-cols-2" disabled={!canEdit}>
               <CrmField id={fieldId("type")} label={fields.type}>

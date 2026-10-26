@@ -285,3 +285,8 @@ export function mockCrmServiceIds(): Set<string> {
 export function mockCrmProductById(productId: string): RawCrmProduct | null {
   return products.find((p) => p.id === productId) ?? null;
 }
+
+/** Every mock product, for the stock mock's level listing. */
+export function mockCrmProducts(): readonly RawCrmProduct[] {
+  return products;
+}

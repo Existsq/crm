@@ -4,8 +4,8 @@
  * Mirrors the relay contract closely enough for UI tests: role × action
  * capabilities from ADR-0002, compare-and-swap revisions, the one-default
  * warehouse rule and `restricted:` / `conflict:` / `invalid:` error prefixes.
- * Specs seed state with `window.__BUZZ_E2E_SEED_CRM__`. Catalog commands are
- * delegated to `e2eBridgeCrmProducts.ts`.
+ * Specs seed state with `window.__BUZZ_E2E_SEED_CRM__`. Catalog, sales, cash,
+ * staff and stock commands are delegated to the `e2eBridgeCrm*.ts` sub-mocks.
  */
 
 import type {
@@ -26,9 +26,12 @@ import {
   seedMockCrmCash,
 } from "./e2eBridgeCrmCash.ts";
 import {
+  checkMockAppointmentPayable,
   handleCrmAppointmentMockCommand,
   type MockCrmAppointmentSeed,
+  payMockAppointment,
   seedMockCrmAppointments,
+  unpayMockAppointment,
 } from "./e2eBridgeCrmAppointments.ts";
 import {
   handleCrmReminderMockCommand,
@@ -46,6 +49,15 @@ import {
   type MockCrmStaffSeed,
   seedMockCrmStaff,
 } from "./e2eBridgeCrmStaff.ts";
+import {
+  defaultMockCrmStock,
+  handleCrmStockMockCommand,
+  type MockCrmStockSeed,
+  type MockCrmTechCardSeed,
+  postMockSaleStock,
+  seedMockCrmStock,
+  voidMockSaleStock,
+} from "./e2eBridgeCrmStock.ts";
 import { KIND_CRM_PRODUCT } from "@/features/crm/lib/crmKinds";
 
 type RawSettings = Extract<RawCrmSpace, { member: true }>["settings"];
@@ -87,6 +99,9 @@ export type MockCrmSeed = {
     sales?: MockCrmSaleSeed[];
     cash?: MockCrmCashSeed;
     staff?: MockCrmStaffSeed[];
+    /** Opening stock; omitted, every seeded stocked product gets 100 units. */
+    stock?: MockCrmStockSeed[];
+    techCards?: MockCrmTechCardSeed[];
     appointments?: MockCrmAppointmentSeed[];
     reminders?: MockCrmRemindersSeed;
   } | null;
@@ -162,6 +177,7 @@ export function resetMockCrm(): void {
   seedMockCrmSales();
   seedMockCrmCash();
   seedMockCrmStaff();
+  seedMockCrmStock();
   seedMockCrmAppointments();
   seedMockCrmReminders();
 }
@@ -175,6 +191,11 @@ export function seedMockCrm(seed: MockCrmSeed): void {
   );
   seedMockCrmCash(seed.space?.cash);
   seedMockCrmStaff(seed.space?.staff ?? []);
+  seedMockCrmStock(
+    seed.space?.stock ?? defaultMockCrmStock(),
+    seed.space?.techCards ?? [],
+    seed.space?.warehouses?.[0]?.id ?? null,
+  );
   seedMockCrmAppointments(seed.space?.appointments ?? []);
   seedMockCrmReminders(seed.space?.reminders);
   state = {
@@ -379,12 +400,46 @@ export function handleCrmMockCommand(
         ),
       };
     default: {
+      const visitId =
+        command === "crm_post_sale"
+          ? (payload as { input: { appointment_id?: string | null } }).input
+              .appointment_id
+          : null;
+      if (visitId) checkMockAppointmentPayable(visitId);
+      const channelId = state.space?.role ? state.space.channelId : null;
+      const warehouses = state.space?.warehouses ?? [];
+      const allowNegative = state.space?.settings.allow_negative_stock ?? false;
       const sales = handleCrmSalesMockCommand(command, payload, {
-        channelId: state.space?.role ? state.space.channelId : null,
-        warehouses: state.space?.warehouses ?? [],
+        channelId,
+        warehouses,
+        requireCapability,
+        postSaleStock: (saleId, warehouseId, lines) =>
+          postMockSaleStock(saleId, warehouseId, lines, allowNegative),
+        voidSaleStock: voidMockSaleStock,
+      });
+      if (sales) {
+        if (visitId) {
+          payMockAppointment(
+            visitId,
+            (payload as { input: { sale_id: string } }).input.sale_id,
+          );
+        }
+        if (command === "crm_void_sale") {
+          unpayMockAppointment((payload as { saleId: string }).saleId);
+        }
+        return sales;
+      }
+      const stock = handleCrmStockMockCommand(command, payload, {
+        channelId,
+        warehouses,
+        allowNegative,
         requireCapability,
       });
-      if (sales) return sales;
+      if (stock) {
+        return command === "crm_post_stock_doc"
+          ? { value: loseResponseIfArmed(stock.value) }
+          : stock;
+      }
       const cash = handleCrmCashMockCommand(command, payload, {
         channelId: state.space?.role ? state.space.channelId : null,
         requireCapability,

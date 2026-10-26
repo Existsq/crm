@@ -63,6 +63,16 @@ pub async fn crm_list_appointments(
     get_relay_json::<Value>(&state, &path).await
 }
 
+/// `GET /crm/appointments/{id}` as returned by the relay.
+#[tauri::command]
+pub async fn crm_get_appointment(
+    appointment_id: String,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let id = parse_uuid(&appointment_id, "appointment id")?;
+    get_relay_json::<Value>(&state, &format!("/crm/appointments/{id}")).await
+}
+
 /// `GET /crm/slots` as returned by the relay.
 #[tauri::command]
 pub async fn crm_get_slots(
@@ -74,6 +84,27 @@ pub async fn crm_get_slots(
 ) -> Result<Value, String> {
     let path = slots_path(&date, &service_ids, staff_id.as_deref(), step)?;
     get_relay_json::<Value>(&state, &path).await
+}
+
+/// `GET /crm/analytics/services` as returned by the relay.
+#[tauri::command]
+pub async fn crm_get_visit_analytics(
+    from: Option<String>,
+    to: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let mut params = Vec::new();
+    if let Some(from) = from.as_deref() {
+        params.push(format!("from={}", date(from)?));
+    }
+    if let Some(to) = to.as_deref() {
+        params.push(format!("to={}", date(to)?));
+    }
+    get_relay_json::<Value>(
+        &state,
+        &format!("/crm/analytics/services?{}", params.join("&")),
+    )
+    .await
 }
 
 /// Create or update an appointment.

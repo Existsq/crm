@@ -239,6 +239,16 @@ export function mockCrmStaffIntervals(
   );
 }
 
+/** Every scheduled day, for the analytics mock. */
+export function mockCrmStaffDays(): RawCrmScheduleDay[] {
+  return days;
+}
+
+/** Every staff member, archived included, for the analytics mock. */
+export function mockCrmAllStaff(): RawCrmStaff[] {
+  return staff;
+}
+
 /** Active staff members, for the slot mock. */
 export function mockCrmActiveStaff(): RawCrmStaff[] {
   return staff.filter((s) => !s.archived);
